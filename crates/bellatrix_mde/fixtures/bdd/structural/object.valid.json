@@ -1,430 +1,721 @@
 {
-  "schema_version": 1,
+  "schemaVersion": 2,
   "id": "object-project",
   "name": "Order snapshot with typed slots",
-  "root_model": "root",
-  "elements": [
-    {
-      "id": "root",
-      "kind": "uml.model",
-      "name": "Order snapshot with typed slots",
-      "properties": {}
-    },
-    {
-      "id": "string",
-      "kind": "uml.primitive_type",
-      "name": "String",
-      "properties": {}
-    },
-    {
-      "id": "integer",
-      "kind": "uml.primitive_type",
-      "name": "Integer",
-      "properties": {}
-    },
-    {
-      "id": "customer",
-      "kind": "uml.class",
-      "name": "Customer",
-      "properties": {}
-    },
-    {
-      "id": "order",
-      "kind": "uml.class",
-      "name": "Order",
-      "properties": {}
-    },
-    {
-      "id": "other",
-      "kind": "uml.class",
-      "name": "Unrelated",
-      "properties": {}
-    },
-    {
-      "id": "name",
-      "kind": "uml.attribute",
-      "name": "name",
-      "properties": {
-        "type": {
-          "$ref": "string"
-        },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "number",
-      "kind": "uml.attribute",
-      "name": "number",
-      "properties": {
-        "type": {
-          "$ref": "string"
-        },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "total",
-      "kind": "uml.attribute",
-      "name": "total",
-      "properties": {
-        "type": {
-          "$ref": "integer"
-        },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "alice",
-      "kind": "uml.instance_specification",
-      "name": "alice",
-      "properties": {
-        "classifier": [
-          {
-            "$ref": "customer"
+  "model": {
+    "registry": {
+      "entries": {
+        "alice": {
+          "id": "alice",
+          "type": "InstanceSpecification",
+          "data": {
+            "id": "alice",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "alice",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "deployment": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "classifier": [
+              "customer"
+            ],
+            "slot": [
+              "alice-name"
+            ],
+            "specification": null
           }
-        ]
-      }
-    },
-    {
-      "id": "order-1042",
-      "kind": "uml.instance_specification",
-      "name": "order-1042",
-      "properties": {
-        "classifier": [
-          {
-            "$ref": "order"
-          }
-        ]
-      }
-    },
-    {
-      "id": "order-1043",
-      "kind": "uml.instance_specification",
-      "name": "order-1043",
-      "properties": {
-        "classifier": [
-          {
-            "$ref": "order"
-          }
-        ]
-      }
-    },
-    {
-      "id": "alice-name",
-      "kind": "uml.slot",
-      "name": "",
-      "properties": {
-        "definingFeature": {
-          "$ref": "name"
         },
-        "value": [
-          {
-            "$ref": "alice-name-value"
+        "alice-name": {
+          "id": "alice-name",
+          "type": "Slot",
+          "data": {
+            "id": "alice-name",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "value": [
+              "alice-name-value"
+            ],
+            "definingFeature": "name",
+            "owningInstance": "alice"
           }
-        ]
-      }
-    },
-    {
-      "id": "alice-name-value",
-      "kind": "uml.literal_string",
-      "name": "",
-      "properties": {
-        "value": "Alice",
-        "visibility": null
-      }
-    },
-    {
-      "id": "first-number",
-      "kind": "uml.slot",
-      "name": "",
-      "properties": {
-        "definingFeature": {
-          "$ref": "number"
         },
-        "value": [
-          {
-            "$ref": "first-number-value"
+        "alice-name-value": {
+          "id": "alice-name-value",
+          "type": "LiteralString",
+          "data": {
+            "id": "alice-name-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "Alice"
           }
-        ]
-      }
-    },
-    {
-      "id": "first-number-value",
-      "kind": "uml.literal_string",
-      "name": "",
-      "properties": {
-        "value": "1042",
-        "visibility": null
-      }
-    },
-    {
-      "id": "first-total",
-      "kind": "uml.slot",
-      "name": "",
-      "properties": {
-        "definingFeature": {
-          "$ref": "total"
         },
-        "value": [
-          {
-            "$ref": "first-total-value"
+        "customer": {
+          "id": "customer",
+          "type": "Class",
+          "data": {
+            "id": "customer",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "name"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
           }
-        ]
-      }
-    },
-    {
-      "id": "first-total-value",
-      "kind": "uml.literal_integer",
-      "name": "",
-      "properties": {
-        "value": 125,
-        "visibility": null
-      }
-    },
-    {
-      "id": "second-number",
-      "kind": "uml.slot",
-      "name": "",
-      "properties": {
-        "definingFeature": {
-          "$ref": "number"
         },
-        "value": [
-          {
-            "$ref": "second-number-value"
+        "first-number": {
+          "id": "first-number",
+          "type": "Slot",
+          "data": {
+            "id": "first-number",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "value": [
+              "first-number-value"
+            ],
+            "definingFeature": "number",
+            "owningInstance": "order-1042"
           }
-        ]
-      }
-    },
-    {
-      "id": "second-number-value",
-      "kind": "uml.literal_string",
-      "name": "",
-      "properties": {
-        "value": "1043",
-        "visibility": null
-      }
-    },
-    {
-      "id": "second-total",
-      "kind": "uml.slot",
-      "name": "",
-      "properties": {
-        "definingFeature": {
-          "$ref": "total"
         },
-        "value": [
-          {
-            "$ref": "second-total-value"
+        "first-number-value": {
+          "id": "first-number-value",
+          "type": "LiteralString",
+          "data": {
+            "id": "first-number-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1042"
           }
-        ]
-      }
-    },
-    {
-      "id": "second-total-value",
-      "kind": "uml.literal_integer",
-      "name": "",
-      "properties": {
-        "value": 80,
-        "visibility": null
-      }
-    }
-  ],
-  "relations": [
-    {
-      "id": "owns-string",
-      "kind": "owns",
-      "from": "root",
-      "to": "string",
-      "properties": {}
-    },
-    {
-      "id": "owns-integer",
-      "kind": "owns",
-      "from": "root",
-      "to": "integer",
-      "properties": {}
-    },
-    {
-      "id": "owns-customer",
-      "kind": "owns",
-      "from": "root",
-      "to": "customer",
-      "properties": {}
-    },
-    {
-      "id": "owns-order",
-      "kind": "owns",
-      "from": "root",
-      "to": "order",
-      "properties": {}
-    },
-    {
-      "id": "owns-other",
-      "kind": "owns",
-      "from": "root",
-      "to": "other",
-      "properties": {}
-    },
-    {
-      "id": "owns-name",
-      "kind": "owns",
-      "from": "customer",
-      "to": "name",
-      "properties": {}
-    },
-    {
-      "id": "owns-number",
-      "kind": "owns",
-      "from": "order",
-      "to": "number",
-      "properties": {}
-    },
-    {
-      "id": "owns-total",
-      "kind": "owns",
-      "from": "order",
-      "to": "total",
-      "properties": {}
-    },
-    {
-      "id": "owns-alice",
-      "kind": "owns",
-      "from": "root",
-      "to": "alice",
-      "properties": {}
-    },
-    {
-      "id": "owns-order-1042",
-      "kind": "owns",
-      "from": "root",
-      "to": "order-1042",
-      "properties": {}
-    },
-    {
-      "id": "owns-order-1043",
-      "kind": "owns",
-      "from": "root",
-      "to": "order-1043",
-      "properties": {}
-    },
-    {
-      "id": "owns-alice-name",
-      "kind": "owns",
-      "from": "alice",
-      "to": "alice-name",
-      "properties": {}
-    },
-    {
-      "id": "owns-alice-name-value",
-      "kind": "owns",
-      "from": "alice-name",
-      "to": "alice-name-value",
-      "properties": {}
-    },
-    {
-      "id": "owns-first-number",
-      "kind": "owns",
-      "from": "order-1042",
-      "to": "first-number",
-      "properties": {}
-    },
-    {
-      "id": "owns-first-number-value",
-      "kind": "owns",
-      "from": "first-number",
-      "to": "first-number-value",
-      "properties": {}
-    },
-    {
-      "id": "owns-first-total",
-      "kind": "owns",
-      "from": "order-1042",
-      "to": "first-total",
-      "properties": {}
-    },
-    {
-      "id": "owns-first-total-value",
-      "kind": "owns",
-      "from": "first-total",
-      "to": "first-total-value",
-      "properties": {}
-    },
-    {
-      "id": "owns-second-number",
-      "kind": "owns",
-      "from": "order-1043",
-      "to": "second-number",
-      "properties": {}
-    },
-    {
-      "id": "owns-second-number-value",
-      "kind": "owns",
-      "from": "second-number",
-      "to": "second-number-value",
-      "properties": {}
-    },
-    {
-      "id": "owns-second-total",
-      "kind": "owns",
-      "from": "order-1043",
-      "to": "second-total",
-      "properties": {}
-    },
-    {
-      "id": "owns-second-total-value",
-      "kind": "owns",
-      "from": "second-total",
-      "to": "second-total-value",
-      "properties": {}
-    }
-  ],
-  "diagrams": [
-    {
-      "id": "diagram",
-      "name": "Order snapshot with typed slots",
-      "uml_di_type": "UMLObjectDiagram",
-      "width": 1240,
-      "height": 800,
-      "model_elements": [],
-      "views": [
-        {
-          "id": "view-alice",
-          "subject": "alice",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
         },
-        {
-          "id": "view-order-1042",
-          "subject": "order-1042",
-          "geometry": {
-            "kind": "rect",
-            "x": 325,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
+        "first-total": {
+          "id": "first-total",
+          "type": "Slot",
+          "data": {
+            "id": "first-total",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "value": [
+              "first-total-value"
+            ],
+            "definingFeature": "total",
+            "owningInstance": "order-1042"
+          }
         },
-        {
-          "id": "view-order-1043",
-          "subject": "order-1043",
-          "geometry": {
-            "kind": "rect",
-            "x": 610,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
+        "first-total-value": {
+          "id": "first-total-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "first-total-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "125"
+          }
+        },
+        "integer": {
+          "id": "integer",
+          "type": "PrimitiveType",
+          "data": {
+            "id": "integer",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Integer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedOperation": []
+          }
+        },
+        "name": {
+          "id": "name",
+          "type": "Property",
+          "data": {
+            "id": "name",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "name",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "string",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "name-upperValue-value",
+            "lowerValue": "name-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "name-lowerValue-value": {
+          "id": "name-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "name-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "name-upperValue-value": {
+          "id": "name-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "name-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "number": {
+          "id": "number",
+          "type": "Property",
+          "data": {
+            "id": "number",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "number",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "string",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "number-upperValue-value",
+            "lowerValue": "number-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "number-lowerValue-value": {
+          "id": "number-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "number-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "number-upperValue-value": {
+          "id": "number-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "number-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "order": {
+          "id": "order",
+          "type": "Class",
+          "data": {
+            "id": "order",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "number",
+              "total"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "order-1042": {
+          "id": "order-1042",
+          "type": "InstanceSpecification",
+          "data": {
+            "id": "order-1042",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "order-1042",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "deployment": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "classifier": [
+              "order"
+            ],
+            "slot": [
+              "first-number",
+              "first-total"
+            ],
+            "specification": null
+          }
+        },
+        "order-1043": {
+          "id": "order-1043",
+          "type": "InstanceSpecification",
+          "data": {
+            "id": "order-1043",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "order-1043",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "deployment": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "classifier": [
+              "order"
+            ],
+            "slot": [
+              "second-number",
+              "second-total"
+            ],
+            "specification": null
+          }
+        },
+        "other": {
+          "id": "other",
+          "type": "Class",
+          "data": {
+            "id": "other",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Unrelated",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "root": {
+          "id": "root",
+          "type": "Model",
+          "data": {
+            "id": "root",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Order snapshot with typed slots",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "string",
+              "integer",
+              "customer",
+              "order",
+              "other",
+              "alice",
+              "order-1042",
+              "order-1043"
+            ],
+            "profileApplication": [],
+            "viewpoint": null
+          }
+        },
+        "second-number": {
+          "id": "second-number",
+          "type": "Slot",
+          "data": {
+            "id": "second-number",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "value": [
+              "second-number-value"
+            ],
+            "definingFeature": "number",
+            "owningInstance": "order-1043"
+          }
+        },
+        "second-number-value": {
+          "id": "second-number-value",
+          "type": "LiteralString",
+          "data": {
+            "id": "second-number-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1043"
+          }
+        },
+        "second-total": {
+          "id": "second-total",
+          "type": "Slot",
+          "data": {
+            "id": "second-total",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "value": [
+              "second-total-value"
+            ],
+            "definingFeature": "total",
+            "owningInstance": "order-1043"
+          }
+        },
+        "second-total-value": {
+          "id": "second-total-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "second-total-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "80"
+          }
+        },
+        "string": {
+          "id": "string",
+          "type": "PrimitiveType",
+          "data": {
+            "id": "string",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "String",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedOperation": []
+          }
+        },
+        "total": {
+          "id": "total",
+          "type": "Property",
+          "data": {
+            "id": "total",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "total",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "integer",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "total-upperValue-value",
+            "lowerValue": "total-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "total-lowerValue-value": {
+          "id": "total-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "total-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "total-upperValue-value": {
+          "id": "total-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "total-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         }
-      ]
-    }
-  ]
+      }
+    },
+    "rootModel": "root",
+    "diagrams": [
+      {
+        "id": "diagram",
+        "name": "Order snapshot with typed slots",
+        "uml_di_type": "UMLObjectDiagram",
+        "width": 1240,
+        "height": 800,
+        "model_elements": [],
+        "views": [
+          {
+            "id": "view-alice",
+            "subject": "alice",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-order-1042",
+            "subject": "order-1042",
+            "geometry": {
+              "kind": "rect",
+              "x": 325,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-order-1043",
+            "subject": "order-1043",
+            "geometry": {
+              "kind": "rect",
+              "x": 610,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          }
+        ]
+      }
+    ]
+  }
 }

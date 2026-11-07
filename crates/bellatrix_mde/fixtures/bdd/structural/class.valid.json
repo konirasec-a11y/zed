@@ -1,756 +1,1803 @@
 {
-  "schema_version": 1,
+  "schemaVersion": 2,
   "id": "class-project",
   "name": "Order management domain",
-  "root_model": "root",
-  "elements": [
-    {
-      "id": "root",
-      "kind": "uml.model",
-      "name": "Order management domain",
-      "properties": {}
-    },
-    {
-      "id": "domain",
-      "kind": "uml.package",
-      "name": "Orders",
-      "properties": {}
-    },
-    {
-      "id": "string",
-      "kind": "uml.primitive_type",
-      "name": "String",
-      "properties": {}
-    },
-    {
-      "id": "integer",
-      "kind": "uml.primitive_type",
-      "name": "Integer",
-      "properties": {}
-    },
-    {
-      "id": "money",
-      "kind": "uml.data_type",
-      "name": "Money",
-      "properties": {}
-    },
-    {
-      "id": "amount",
-      "kind": "uml.attribute",
-      "name": "amount",
-      "properties": {
-        "type": {
-          "$ref": "integer"
+  "model": {
+    "registry": {
+      "entries": {
+        "amount": {
+          "id": "amount",
+          "type": "Property",
+          "data": {
+            "id": "amount",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "amount",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "integer",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "amount-upperValue-value",
+            "lowerValue": "amount-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": "money",
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
         },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "currency",
-      "kind": "uml.attribute",
-      "name": "currency",
-      "properties": {
-        "type": {
-          "$ref": "string"
+        "amount-lowerValue-value": {
+          "id": "amount-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "amount-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "status",
-      "kind": "uml.enumeration",
-      "name": "OrderStatus",
-      "properties": {}
-    },
-    {
-      "id": "pending",
-      "kind": "uml.enumeration_literal",
-      "name": "Pending",
-      "properties": {}
-    },
-    {
-      "id": "paid",
-      "kind": "uml.enumeration_literal",
-      "name": "Paid",
-      "properties": {}
-    },
-    {
-      "id": "shipped",
-      "kind": "uml.enumeration_literal",
-      "name": "Shipped",
-      "properties": {}
-    },
-    {
-      "id": "entity",
-      "kind": "uml.class",
-      "name": "Entity",
-      "properties": {
-        "isAbstract": true
-      }
-    },
-    {
-      "id": "customer",
-      "kind": "uml.class",
-      "name": "Customer",
-      "properties": {}
-    },
-    {
-      "id": "order",
-      "kind": "uml.class",
-      "name": "Order",
-      "properties": {}
-    },
-    {
-      "id": "line",
-      "kind": "uml.class",
-      "name": "OrderLine",
-      "properties": {}
-    },
-    {
-      "id": "product",
-      "kind": "uml.class",
-      "name": "Product",
-      "properties": {}
-    },
-    {
-      "id": "ident",
-      "kind": "uml.attribute",
-      "name": "id",
-      "properties": {
-        "type": {
-          "$ref": "string"
+        "amount-upperValue-value": {
+          "id": "amount-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "amount-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         },
-        "visibility": "protected",
-        "multiplicity": "1",
-        "isReadOnly": true
-      }
-    },
-    {
-      "id": "customer-name",
-      "kind": "uml.attribute",
-      "name": "name",
-      "properties": {
-        "type": {
-          "$ref": "string"
+        "audit": {
+          "id": "audit",
+          "type": "Comment",
+          "data": {
+            "id": "audit",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "body": "Submitting an order freezes its identifier.",
+            "annotatedElement": [
+              "order"
+            ]
+          }
         },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "order-status",
-      "kind": "uml.attribute",
-      "name": "status",
-      "properties": {
-        "type": {
-          "$ref": "status"
+        "currency": {
+          "id": "currency",
+          "type": "Property",
+          "data": {
+            "id": "currency",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "currency",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "string",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "currency-upperValue-value",
+            "lowerValue": "currency-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": "money",
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
         },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "quantity",
-      "kind": "uml.attribute",
-      "name": "quantity",
-      "properties": {
-        "type": {
-          "$ref": "integer"
+        "currency-lowerValue-value": {
+          "id": "currency-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "currency-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "price",
-      "kind": "uml.attribute",
-      "name": "price",
-      "properties": {
-        "type": {
-          "$ref": "money"
+        "currency-upperValue-value": {
+          "id": "currency-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "currency-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "sku",
-      "kind": "uml.attribute",
-      "name": "sku",
-      "properties": {
-        "type": {
-          "$ref": "string"
+        "customer": {
+          "id": "customer",
+          "type": "Class",
+          "data": {
+            "id": "customer",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "customer-name"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
         },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "submit",
-      "kind": "uml.operation",
-      "name": "submit",
-      "properties": {
-        "visibility": "public",
-        "isQuery": false
-      }
-    },
-    {
-      "id": "submit-request",
-      "kind": "uml.parameter",
-      "name": "requestedBy",
-      "properties": {
-        "direction": "in",
-        "type": {
-          "$ref": "customer"
+        "customer-name": {
+          "id": "customer-name",
+          "type": "Property",
+          "data": {
+            "id": "customer-name",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "name",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "string",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "customer-name-upperValue-value",
+            "lowerValue": "customer-name-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
         },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "submit-result",
-      "kind": "uml.parameter",
-      "name": "acceptedOrder",
-      "properties": {
-        "direction": "return",
-        "type": {
-          "$ref": "order"
+        "customer-name-lowerValue-value": {
+          "id": "customer-name-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "customer-name-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "repository",
-      "kind": "uml.interface",
-      "name": "OrderRepository",
-      "properties": {}
-    },
-    {
-      "id": "find",
-      "kind": "uml.operation",
-      "name": "find",
-      "properties": {
-        "isQuery": true,
-        "visibility": "public"
-      }
-    },
-    {
-      "id": "find-key",
-      "kind": "uml.parameter",
-      "name": "id",
-      "properties": {
-        "direction": "in",
-        "type": {
-          "$ref": "string"
+        "customer-name-upperValue-value": {
+          "id": "customer-name-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "customer-name-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "domain": {
+          "id": "domain",
+          "type": "Package",
+          "data": {
+            "id": "domain",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Orders",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "money",
+              "status",
+              "entity",
+              "customer",
+              "order",
+              "line",
+              "product",
+              "repository",
+              "order-lines"
+            ],
+            "profileApplication": []
+          }
+        },
+        "entity": {
+          "id": "entity",
+          "type": "Class",
+          "data": {
+            "id": "entity",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Entity",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "true",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "ident"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "find": {
+          "id": "find",
+          "type": "Operation",
+          "data": {
+            "id": "find",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "find",
+            "visibility": "Public",
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "isStatic": "false",
+            "ownedParameter": [
+              "find-key",
+              "find-result"
+            ],
+            "isAbstract": "false",
+            "method": [],
+            "concurrency": "Sequential",
+            "raisedException": [],
+            "ownedParameterSet": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "interface": "repository",
+            "class": null,
+            "isQuery": "true",
+            "precondition": [],
+            "postcondition": [],
+            "redefinedOperation": [],
+            "datatype": null,
+            "bodyCondition": null
+          }
+        },
+        "find-key": {
+          "id": "find-key",
+          "type": "Parameter",
+          "data": {
+            "id": "find-key",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "id",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "type": "string",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": null,
+            "lowerValue": null,
+            "parameterSet": [],
+            "direction": "In",
+            "defaultValue": null,
+            "isException": "false",
+            "isStream": "false",
+            "effect": null
+          }
+        },
+        "find-result": {
+          "id": "find-result",
+          "type": "Parameter",
+          "data": {
+            "id": "find-result",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "type": "order",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "find-result-upperValue-value",
+            "lowerValue": "find-result-lowerValue-value",
+            "parameterSet": [],
+            "direction": "Return",
+            "defaultValue": null,
+            "isException": "false",
+            "isStream": "false",
+            "effect": null
+          }
+        },
+        "find-result-lowerValue-value": {
+          "id": "find-result-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "find-result-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "0"
+          }
+        },
+        "find-result-upperValue-value": {
+          "id": "find-result-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "find-result-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "general-customer": {
+          "id": "general-customer",
+          "type": "Generalization",
+          "data": {
+            "id": "general-customer",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "isSubstitutable": null,
+            "generalizationSet": [],
+            "specific": "customer",
+            "general": "entity"
+          }
+        },
+        "general-order": {
+          "id": "general-order",
+          "type": "Generalization",
+          "data": {
+            "id": "general-order",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "isSubstitutable": null,
+            "generalizationSet": [],
+            "specific": "order",
+            "general": "entity"
+          }
+        },
+        "general-product": {
+          "id": "general-product",
+          "type": "Generalization",
+          "data": {
+            "id": "general-product",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "isSubstitutable": null,
+            "generalizationSet": [],
+            "specific": "product",
+            "general": "entity"
+          }
+        },
+        "ident": {
+          "id": "ident",
+          "type": "Property",
+          "data": {
+            "id": "ident",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "id",
+            "visibility": "Protected",
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "string",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "ident-upperValue-value",
+            "lowerValue": "ident-lowerValue-value",
+            "isReadOnly": "true",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "ident-lowerValue-value": {
+          "id": "ident-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "ident-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "ident-upperValue-value": {
+          "id": "ident-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "ident-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "integer": {
+          "id": "integer",
+          "type": "PrimitiveType",
+          "data": {
+            "id": "integer",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Integer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedOperation": []
+          }
+        },
+        "line": {
+          "id": "line",
+          "type": "Class",
+          "data": {
+            "id": "line",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "OrderLine",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "quantity"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "money": {
+          "id": "money",
+          "type": "DataType",
+          "data": {
+            "id": "money",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Money",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "amount",
+              "currency"
+            ],
+            "ownedOperation": []
+          }
+        },
+        "order": {
+          "id": "order",
+          "type": "Class",
+          "data": {
+            "id": "order",
+            "eAnnotations": [],
+            "ownedComment": [
+              "audit"
+            ],
+            "name": "Order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "order-status"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [
+              "submit"
+            ],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "order-lines": {
+          "id": "order-lines",
+          "type": "Association",
+          "data": {
+            "id": "order-lines",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "OrderContents",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedEnd": [
+              "whole",
+              "parts"
+            ],
+            "memberEnd": [
+              "whole",
+              "parts"
+            ],
+            "isDerived": "false",
+            "navigableOwnedEnd": []
+          }
+        },
+        "order-status": {
+          "id": "order-status",
+          "type": "Property",
+          "data": {
+            "id": "order-status",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "status",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "status",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "order-status-upperValue-value",
+            "lowerValue": "order-status-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "order-status-lowerValue-value": {
+          "id": "order-status-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "order-status-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "order-status-upperValue-value": {
+          "id": "order-status-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "order-status-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "paid": {
+          "id": "paid",
+          "type": "EnumerationLiteral",
+          "data": {
+            "id": "paid",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Paid",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "deployment": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "classifier": [],
+            "slot": [],
+            "specification": null,
+            "enumeration": "status"
+          }
+        },
+        "parts": {
+          "id": "parts",
+          "type": "Property",
+          "data": {
+            "id": "parts",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "lines",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "line",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "parts-upperValue-value",
+            "lowerValue": "parts-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "Composite",
+            "redefinedProperty": [],
+            "owningAssociation": "order-lines",
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "parts-lowerValue-value": {
+          "id": "parts-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "parts-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "parts-upperValue-value": {
+          "id": "parts-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "parts-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "*"
+          }
+        },
+        "pending": {
+          "id": "pending",
+          "type": "EnumerationLiteral",
+          "data": {
+            "id": "pending",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Pending",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "deployment": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "classifier": [],
+            "slot": [],
+            "specification": null,
+            "enumeration": "status"
+          }
+        },
+        "price": {
+          "id": "price",
+          "type": "Property",
+          "data": {
+            "id": "price",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "price",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "money",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "price-upperValue-value",
+            "lowerValue": "price-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "price-lowerValue-value": {
+          "id": "price-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "price-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "price-upperValue-value": {
+          "id": "price-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "price-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "product": {
+          "id": "product",
+          "type": "Class",
+          "data": {
+            "id": "product",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Product",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "price",
+              "sku"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "quantity": {
+          "id": "quantity",
+          "type": "Property",
+          "data": {
+            "id": "quantity",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "quantity",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "integer",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "quantity-upperValue-value",
+            "lowerValue": "quantity-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "quantity-lowerValue-value": {
+          "id": "quantity-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "quantity-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "quantity-upperValue-value": {
+          "id": "quantity-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "quantity-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "repository": {
+          "id": "repository",
+          "type": "Interface",
+          "data": {
+            "id": "repository",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "OrderRepository",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedOperation": [
+              "find"
+            ],
+            "nestedClassifier": [],
+            "redefinedInterface": [],
+            "ownedReception": [],
+            "protocol": null
+          }
+        },
+        "root": {
+          "id": "root",
+          "type": "Model",
+          "data": {
+            "id": "root",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Order management domain",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "domain",
+              "string",
+              "integer"
+            ],
+            "profileApplication": [],
+            "viewpoint": null
+          }
+        },
+        "shipped": {
+          "id": "shipped",
+          "type": "EnumerationLiteral",
+          "data": {
+            "id": "shipped",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Shipped",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "deployment": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "classifier": [],
+            "slot": [],
+            "specification": null,
+            "enumeration": "status"
+          }
+        },
+        "sku": {
+          "id": "sku",
+          "type": "Property",
+          "data": {
+            "id": "sku",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "sku",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "string",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "sku-upperValue-value",
+            "lowerValue": "sku-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "sku-lowerValue-value": {
+          "id": "sku-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "sku-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "sku-upperValue-value": {
+          "id": "sku-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "sku-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "status": {
+          "id": "status",
+          "type": "Enumeration",
+          "data": {
+            "id": "status",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "OrderStatus",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedOperation": [],
+            "ownedLiteral": [
+              "pending",
+              "paid",
+              "shipped"
+            ]
+          }
+        },
+        "string": {
+          "id": "string",
+          "type": "PrimitiveType",
+          "data": {
+            "id": "string",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "String",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedOperation": []
+          }
+        },
+        "submit": {
+          "id": "submit",
+          "type": "Operation",
+          "data": {
+            "id": "submit",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "submit",
+            "visibility": "Public",
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "isStatic": "false",
+            "ownedParameter": [
+              "submit-request",
+              "submit-result"
+            ],
+            "isAbstract": "false",
+            "method": [],
+            "concurrency": "Sequential",
+            "raisedException": [],
+            "ownedParameterSet": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "interface": null,
+            "class": "order",
+            "isQuery": "false",
+            "precondition": [],
+            "postcondition": [],
+            "redefinedOperation": [],
+            "datatype": null,
+            "bodyCondition": null
+          }
+        },
+        "submit-request": {
+          "id": "submit-request",
+          "type": "Parameter",
+          "data": {
+            "id": "submit-request",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "requestedBy",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "type": "customer",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "submit-request-upperValue-value",
+            "lowerValue": "submit-request-lowerValue-value",
+            "parameterSet": [],
+            "direction": "In",
+            "defaultValue": null,
+            "isException": "false",
+            "isStream": "false",
+            "effect": null
+          }
+        },
+        "submit-request-lowerValue-value": {
+          "id": "submit-request-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "submit-request-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "submit-request-upperValue-value": {
+          "id": "submit-request-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "submit-request-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "submit-result": {
+          "id": "submit-result",
+          "type": "Parameter",
+          "data": {
+            "id": "submit-result",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "acceptedOrder",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "type": "order",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "submit-result-upperValue-value",
+            "lowerValue": "submit-result-lowerValue-value",
+            "parameterSet": [],
+            "direction": "Return",
+            "defaultValue": null,
+            "isException": "false",
+            "isStream": "false",
+            "effect": null
+          }
+        },
+        "submit-result-lowerValue-value": {
+          "id": "submit-result-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "submit-result-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "submit-result-upperValue-value": {
+          "id": "submit-result-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "submit-result-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "whole": {
+          "id": "whole",
+          "type": "Property",
+          "data": {
+            "id": "whole",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "order",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "whole-upperValue-value",
+            "lowerValue": "whole-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": "order-lines",
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "whole-lowerValue-value": {
+          "id": "whole-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "whole-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "whole-upperValue-value": {
+          "id": "whole-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "whole-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         }
       }
     },
-    {
-      "id": "find-result",
-      "kind": "uml.parameter",
-      "name": "order",
-      "properties": {
-        "direction": "return",
-        "type": {
-          "$ref": "order"
-        },
-        "multiplicity": "0..1"
-      }
-    },
-    {
-      "id": "order-lines",
-      "kind": "uml.nary_association",
-      "name": "OrderContents",
-      "properties": {
-        "memberEnd": [
+    "rootModel": "root",
+    "diagrams": [
+      {
+        "id": "diagram",
+        "name": "Order management domain",
+        "uml_di_type": "UMLClassDiagram",
+        "width": 1240,
+        "height": 800,
+        "model_elements": [],
+        "views": [
           {
-            "$ref": "whole"
+            "id": "view-entity",
+            "subject": "entity",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
           },
           {
-            "$ref": "parts"
-          }
-        ],
-        "ownedEnd": [
-          {
-            "$ref": "whole"
+            "id": "view-customer",
+            "subject": "customer",
+            "geometry": {
+              "kind": "rect",
+              "x": 325,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
           },
           {
-            "$ref": "parts"
+            "id": "view-order",
+            "subject": "order",
+            "geometry": {
+              "kind": "rect",
+              "x": 610,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-line",
+            "subject": "line",
+            "geometry": {
+              "kind": "rect",
+              "x": 895,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-product",
+            "subject": "product",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-repository",
+            "subject": "repository",
+            "geometry": {
+              "kind": "rect",
+              "x": 325,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-money",
+            "subject": "money",
+            "geometry": {
+              "kind": "rect",
+              "x": 610,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-status",
+            "subject": "status",
+            "geometry": {
+              "kind": "rect",
+              "x": 895,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-order-lines",
+            "subject": "order-lines",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 400,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-general-customer",
+            "subject": "general-customer",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 565,
+                "y": 105
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 40,
+                    "y": 105
+                  }
+                }
+              ]
+            },
+            "endpoints": {
+              "source_view_id": "view-customer",
+              "target_view_id": "view-entity"
+            },
+            "z_index": 1
+          },
+          {
+            "id": "view-general-order",
+            "subject": "general-order",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 850,
+                "y": 105
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 40,
+                    "y": 105
+                  }
+                }
+              ]
+            },
+            "endpoints": {
+              "source_view_id": "view-order",
+              "target_view_id": "view-entity"
+            },
+            "z_index": 1
+          },
+          {
+            "id": "view-general-product",
+            "subject": "general-product",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 280,
+                "y": 285
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 40,
+                    "y": 105
+                  }
+                }
+              ]
+            },
+            "endpoints": {
+              "source_view_id": "view-product",
+              "target_view_id": "view-entity"
+            },
+            "z_index": 1
           }
         ]
       }
-    },
-    {
-      "id": "whole",
-      "kind": "uml.attribute",
-      "name": "order",
-      "properties": {
-        "type": {
-          "$ref": "order"
-        },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "parts",
-      "kind": "uml.attribute",
-      "name": "lines",
-      "properties": {
-        "type": {
-          "$ref": "line"
-        },
-        "multiplicity": "1..*",
-        "aggregation": "composite"
-      }
-    },
-    {
-      "id": "audit",
-      "kind": "uml.comment",
-      "name": "",
-      "properties": {
-        "body": "Submitting an order freezes its identifier.",
-        "annotatedElement": [
-          {
-            "$ref": "order"
-          }
-        ]
-      }
-    }
-  ],
-  "relations": [
-    {
-      "id": "owns-domain",
-      "kind": "owns",
-      "from": "root",
-      "to": "domain",
-      "properties": {}
-    },
-    {
-      "id": "owns-string",
-      "kind": "owns",
-      "from": "root",
-      "to": "string",
-      "properties": {}
-    },
-    {
-      "id": "owns-integer",
-      "kind": "owns",
-      "from": "root",
-      "to": "integer",
-      "properties": {}
-    },
-    {
-      "id": "owns-money",
-      "kind": "owns",
-      "from": "domain",
-      "to": "money",
-      "properties": {}
-    },
-    {
-      "id": "owns-amount",
-      "kind": "owns",
-      "from": "money",
-      "to": "amount",
-      "properties": {}
-    },
-    {
-      "id": "owns-currency",
-      "kind": "owns",
-      "from": "money",
-      "to": "currency",
-      "properties": {}
-    },
-    {
-      "id": "owns-status",
-      "kind": "owns",
-      "from": "domain",
-      "to": "status",
-      "properties": {}
-    },
-    {
-      "id": "owns-pending",
-      "kind": "owns",
-      "from": "status",
-      "to": "pending",
-      "properties": {}
-    },
-    {
-      "id": "owns-paid",
-      "kind": "owns",
-      "from": "status",
-      "to": "paid",
-      "properties": {}
-    },
-    {
-      "id": "owns-shipped",
-      "kind": "owns",
-      "from": "status",
-      "to": "shipped",
-      "properties": {}
-    },
-    {
-      "id": "owns-entity",
-      "kind": "owns",
-      "from": "domain",
-      "to": "entity",
-      "properties": {}
-    },
-    {
-      "id": "owns-customer",
-      "kind": "owns",
-      "from": "domain",
-      "to": "customer",
-      "properties": {}
-    },
-    {
-      "id": "owns-order",
-      "kind": "owns",
-      "from": "domain",
-      "to": "order",
-      "properties": {}
-    },
-    {
-      "id": "owns-line",
-      "kind": "owns",
-      "from": "domain",
-      "to": "line",
-      "properties": {}
-    },
-    {
-      "id": "owns-product",
-      "kind": "owns",
-      "from": "domain",
-      "to": "product",
-      "properties": {}
-    },
-    {
-      "id": "owns-ident",
-      "kind": "owns",
-      "from": "entity",
-      "to": "ident",
-      "properties": {}
-    },
-    {
-      "id": "owns-customer-name",
-      "kind": "owns",
-      "from": "customer",
-      "to": "customer-name",
-      "properties": {}
-    },
-    {
-      "id": "owns-order-status",
-      "kind": "owns",
-      "from": "order",
-      "to": "order-status",
-      "properties": {}
-    },
-    {
-      "id": "owns-quantity",
-      "kind": "owns",
-      "from": "line",
-      "to": "quantity",
-      "properties": {}
-    },
-    {
-      "id": "owns-price",
-      "kind": "owns",
-      "from": "product",
-      "to": "price",
-      "properties": {}
-    },
-    {
-      "id": "owns-sku",
-      "kind": "owns",
-      "from": "product",
-      "to": "sku",
-      "properties": {}
-    },
-    {
-      "id": "owns-submit",
-      "kind": "owns",
-      "from": "order",
-      "to": "submit",
-      "properties": {}
-    },
-    {
-      "id": "owns-submit-request",
-      "kind": "owns",
-      "from": "submit",
-      "to": "submit-request",
-      "properties": {}
-    },
-    {
-      "id": "owns-submit-result",
-      "kind": "owns",
-      "from": "submit",
-      "to": "submit-result",
-      "properties": {}
-    },
-    {
-      "id": "owns-repository",
-      "kind": "owns",
-      "from": "domain",
-      "to": "repository",
-      "properties": {}
-    },
-    {
-      "id": "owns-find",
-      "kind": "owns",
-      "from": "repository",
-      "to": "find",
-      "properties": {}
-    },
-    {
-      "id": "owns-find-key",
-      "kind": "owns",
-      "from": "find",
-      "to": "find-key",
-      "properties": {}
-    },
-    {
-      "id": "owns-find-result",
-      "kind": "owns",
-      "from": "find",
-      "to": "find-result",
-      "properties": {}
-    },
-    {
-      "id": "general-customer",
-      "kind": "uml.generalization",
-      "from": "customer",
-      "to": "entity",
-      "properties": {}
-    },
-    {
-      "id": "general-order",
-      "kind": "uml.generalization",
-      "from": "order",
-      "to": "entity",
-      "properties": {}
-    },
-    {
-      "id": "general-product",
-      "kind": "uml.generalization",
-      "from": "product",
-      "to": "entity",
-      "properties": {}
-    },
-    {
-      "id": "owns-order-lines",
-      "kind": "owns",
-      "from": "domain",
-      "to": "order-lines",
-      "properties": {}
-    },
-    {
-      "id": "owns-whole",
-      "kind": "owns",
-      "from": "order-lines",
-      "to": "whole",
-      "properties": {}
-    },
-    {
-      "id": "owns-parts",
-      "kind": "owns",
-      "from": "order-lines",
-      "to": "parts",
-      "properties": {}
-    },
-    {
-      "id": "owns-audit",
-      "kind": "owns",
-      "from": "order",
-      "to": "audit",
-      "properties": {}
-    }
-  ],
-  "diagrams": [
-    {
-      "id": "diagram",
-      "name": "Order management domain",
-      "uml_di_type": "UMLClassDiagram",
-      "width": 1240,
-      "height": 800,
-      "model_elements": [],
-      "views": [
-        {
-          "id": "view-entity",
-          "subject": "entity",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-customer",
-          "subject": "customer",
-          "geometry": {
-            "kind": "rect",
-            "x": 325,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-order",
-          "subject": "order",
-          "geometry": {
-            "kind": "rect",
-            "x": 610,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-line",
-          "subject": "line",
-          "geometry": {
-            "kind": "rect",
-            "x": 895,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-product",
-          "subject": "product",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-repository",
-          "subject": "repository",
-          "geometry": {
-            "kind": "rect",
-            "x": 325,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-money",
-          "subject": "money",
-          "geometry": {
-            "kind": "rect",
-            "x": 610,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-status",
-          "subject": "status",
-          "geometry": {
-            "kind": "rect",
-            "x": 895,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-order-lines",
-          "subject": "order-lines",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 400,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-general-customer",
-          "subject": "general-customer",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 565,
-              "y": 105
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 40,
-                  "y": 105
-                }
-              }
-            ]
-          },
-          "endpoints": {
-            "source_view_id": "view-customer",
-            "target_view_id": "view-entity"
-          },
-          "z_index": 1
-        },
-        {
-          "id": "view-general-order",
-          "subject": "general-order",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 850,
-              "y": 105
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 40,
-                  "y": 105
-                }
-              }
-            ]
-          },
-          "endpoints": {
-            "source_view_id": "view-order",
-            "target_view_id": "view-entity"
-          },
-          "z_index": 1
-        },
-        {
-          "id": "view-general-product",
-          "subject": "general-product",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 280,
-              "y": 285
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 40,
-                  "y": 105
-                }
-              }
-            ]
-          },
-          "endpoints": {
-            "source_view_id": "view-product",
-            "target_view_id": "view-entity"
-          },
-          "z_index": 1
-        }
-      ]
-    }
-  ]
+    ]
+  }
 }

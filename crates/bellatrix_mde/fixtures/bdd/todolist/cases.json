@@ -30,7 +30,870 @@
           "diagram_kind": "deployment"
         }
       ],
-      "diagnostics": []
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "model"
+        },
+        {
+          "pointer": "/model/registry/entries/model/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/accepted/type",
+          "value": "DecisionNode"
+        },
+        {
+          "pointer": "/model/registry/entries/account/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/account-id/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/account-id-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/account-id-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/account-lists/type",
+          "value": "Association"
+        },
+        {
+          "pointer": "/model/registry/entries/account-lists-a/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/account-lists-a-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/account-lists-a-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/account-lists-b/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/account-lists-b-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/account-lists-b-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/api/type",
+          "value": "Component"
+        },
+        {
+          "pointer": "/model/registry/entries/api-device/type",
+          "value": "Device"
+        },
+        {
+          "pointer": "/model/registry/entries/api-image/type",
+          "value": "Artifact"
+        },
+        {
+          "pointer": "/model/registry/entries/api-runtime/type",
+          "value": "ExecutionEnvironment"
+        },
+        {
+          "pointer": "/model/registry/entries/application/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/archived/type",
+          "value": "FinalState"
+        },
+        {
+          "pointer": "/model/registry/entries/authenticate/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/authorized/type",
+          "value": "DecisionNode"
+        },
+        {
+          "pointer": "/model/registry/entries/boolean/type",
+          "value": "PrimitiveType"
+        },
+        {
+          "pointer": "/model/registry/entries/browser/type",
+          "value": "Component"
+        },
+        {
+          "pointer": "/model/registry/entries/browser-runtime/type",
+          "value": "ExecutionEnvironment"
+        },
+        {
+          "pointer": "/model/registry/entries/client-device/type",
+          "value": "Device"
+        },
+        {
+          "pointer": "/model/registry/entries/completed/type",
+          "value": "State"
+        },
+        {
+          "pointer": "/model/registry/entries/controller/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/controller-createTodo/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/controller-deleteTodo/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/controller-listTodos/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/controller-request/type",
+          "value": "Usage"
+        },
+        {
+          "pointer": "/model/registry/entries/controller-response/type",
+          "value": "Usage"
+        },
+        {
+          "pointer": "/model/registry/entries/controller-service/type",
+          "value": "Usage"
+        },
+        {
+          "pointer": "/model/registry/entries/controller-updateTodo/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/create-flow/type",
+          "value": "Activity"
+        },
+        {
+          "pointer": "/model/registry/entries/created/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/db-device/type",
+          "value": "Device"
+        },
+        {
+          "pointer": "/model/registry/entries/db-runtime/type",
+          "value": "ExecutionEnvironment"
+        },
+        {
+          "pointer": "/model/registry/entries/deploy-api-image/type",
+          "value": "Deployment"
+        },
+        {
+          "pointer": "/model/registry/entries/deploy-schema/type",
+          "value": "Deployment"
+        },
+        {
+          "pointer": "/model/registry/entries/deploy-web-bundle/type",
+          "value": "Deployment"
+        },
+        {
+          "pointer": "/model/registry/entries/domain/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/event-archive/type",
+          "value": "CallEvent"
+        },
+        {
+          "pointer": "/model/registry/entries/event-complete/type",
+          "value": "CallEvent"
+        },
+        {
+          "pointer": "/model/registry/entries/event-reopen/type",
+          "value": "CallEvent"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-0/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-0-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-0-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-10/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-10-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-10-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-2/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-2-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-3/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-3-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-4/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-4-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-4-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-5/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-5-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-5-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-6/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-6-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-7/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-7-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-8/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-8-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-8-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-9/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-9-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-9-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/guard-2/type",
+          "value": "LiteralString"
+        },
+        {
+          "pointer": "/model/registry/entries/guard-3/type",
+          "value": "LiteralString"
+        },
+        {
+          "pointer": "/model/registry/entries/guard-6/type",
+          "value": "LiteralString"
+        },
+        {
+          "pointer": "/model/registry/entries/guard-7/type",
+          "value": "LiteralString"
+        },
+        {
+          "pointer": "/model/registry/entries/https/type",
+          "value": "Usage"
+        },
+        {
+          "pointer": "/model/registry/entries/infrastructure/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/integer/type",
+          "value": "PrimitiveType"
+        },
+        {
+          "pointer": "/model/registry/entries/lifecycle/type",
+          "value": "StateMachine"
+        },
+        {
+          "pointer": "/model/registry/entries/lifecycle-recovery/type",
+          "value": "StateMachine"
+        },
+        {
+          "pointer": "/model/registry/entries/lifecycle-region/type",
+          "value": "Region"
+        },
+        {
+          "pointer": "/model/registry/entries/lifecycle-start/type",
+          "value": "Pseudostate"
+        },
+        {
+          "pointer": "/model/registry/entries/list/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/list-id/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/list-id-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/list-id-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/list-title/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/list-title-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/list-title-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/list-todos/type",
+          "value": "Association"
+        },
+        {
+          "pointer": "/model/registry/entries/list-todos-a/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/list-todos-a-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/list-todos-a-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/list-todos-b/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/list-todos-b-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/list-todos-b-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/manifest-api-image/type",
+          "value": "Manifestation"
+        },
+        {
+          "pointer": "/model/registry/entries/manifest-schema/type",
+          "value": "Manifestation"
+        },
+        {
+          "pointer": "/model/registry/entries/manifest-web-bundle/type",
+          "value": "Manifestation"
+        },
+        {
+          "pointer": "/model/registry/entries/open/type",
+          "value": "State"
+        },
+        {
+          "pointer": "/model/registry/entries/persist/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/presentation/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/recovery-done/type",
+          "value": "FinalState"
+        },
+        {
+          "pointer": "/model/registry/entries/recovery-region/type",
+          "value": "Region"
+        },
+        {
+          "pointer": "/model/registry/entries/recovery-start/type",
+          "value": "Pseudostate"
+        },
+        {
+          "pointer": "/model/registry/entries/recovery-transition/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/rejected/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/repository/type",
+          "value": "Interface"
+        },
+        {
+          "pointer": "/model/registry/entries/repository-delete/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/repository-findByList/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/repository-insert/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/repository-todo/type",
+          "value": "Usage"
+        },
+        {
+          "pointer": "/model/registry/entries/repository-update/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/request/type",
+          "value": "DataType"
+        },
+        {
+          "pointer": "/model/registry/entries/request-end/type",
+          "value": "ActivityFinalNode"
+        },
+        {
+          "pointer": "/model/registry/entries/request-listId/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/request-listId-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/request-listId-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/request-start/type",
+          "value": "InitialNode"
+        },
+        {
+          "pointer": "/model/registry/entries/request-title/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/request-title-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/request-title-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/requirements/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/response/type",
+          "value": "DataType"
+        },
+        {
+          "pointer": "/model/registry/entries/response-completed/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/response-completed-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/response-completed-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/response-id/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/response-id-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/response-id-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/response-title/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/response-title-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/response-title-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/runtime/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/schema/type",
+          "value": "Artifact"
+        },
+        {
+          "pointer": "/model/registry/entries/service/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/service-createOwnedTodo/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/service-deleteOwnedTodo/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/service-listOwnedTodos/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/service-repository/type",
+          "value": "Usage"
+        },
+        {
+          "pointer": "/model/registry/entries/service-updateOwnedTodo/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/sql/type",
+          "value": "Usage"
+        },
+        {
+          "pointer": "/model/registry/entries/sql-contract/type",
+          "value": "InterfaceRealization"
+        },
+        {
+          "pointer": "/model/registry/entries/sql-repository/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/sql-repository-delete/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/sql-repository-findByList/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/sql-repository-insert/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/sql-repository-update/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/storage/type",
+          "value": "Component"
+        },
+        {
+          "pointer": "/model/registry/entries/string/type",
+          "value": "PrimitiveType"
+        },
+        {
+          "pointer": "/model/registry/entries/todo/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-archive/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-complete/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-completed/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-completed-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-completed-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-id/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-id-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-id-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-reopen/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-title/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-title-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-title-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-version/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-version-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/todo-version-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/transition-archive-completed/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/transition-archive-open/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/transition-complete/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/transition-initialize/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/transition-reopen/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/trigger-archive-completed/type",
+          "value": "Trigger"
+        },
+        {
+          "pointer": "/model/registry/entries/trigger-archive-open/type",
+          "value": "Trigger"
+        },
+        {
+          "pointer": "/model/registry/entries/trigger-complete/type",
+          "value": "Trigger"
+        },
+        {
+          "pointer": "/model/registry/entries/trigger-reopen/type",
+          "value": "Trigger"
+        },
+        {
+          "pointer": "/model/registry/entries/uc-create/type",
+          "value": "UseCase"
+        },
+        {
+          "pointer": "/model/registry/entries/uc-delete/type",
+          "value": "UseCase"
+        },
+        {
+          "pointer": "/model/registry/entries/uc-read/type",
+          "value": "UseCase"
+        },
+        {
+          "pointer": "/model/registry/entries/uc-update/type",
+          "value": "UseCase"
+        },
+        {
+          "pointer": "/model/registry/entries/unauthorized/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/user/type",
+          "value": "Actor"
+        },
+        {
+          "pointer": "/model/registry/entries/user-create/type",
+          "value": "Association"
+        },
+        {
+          "pointer": "/model/registry/entries/user-create-a/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/user-create-a-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/user-create-a-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/user-create-b/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/user-create-b-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/user-create-b-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/user-delete/type",
+          "value": "Association"
+        },
+        {
+          "pointer": "/model/registry/entries/user-delete-a/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/user-delete-a-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/user-delete-a-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/user-delete-b/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/user-delete-b-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/user-delete-b-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/user-read/type",
+          "value": "Association"
+        },
+        {
+          "pointer": "/model/registry/entries/user-read-a/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/user-read-a-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/user-read-a-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/user-read-b/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/user-read-b-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/user-read-b-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/user-update/type",
+          "value": "Association"
+        },
+        {
+          "pointer": "/model/registry/entries/user-update-a/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/user-update-a-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/user-update-a-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/user-update-b/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/user-update-b-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/user-update-b-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/validate/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/web-bundle/type",
+          "value": "Artifact"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "todolist-invalid",
@@ -62,13 +925,28 @@
           "diagram_kind": "deployment"
         }
       ],
-      "diagnostics": [
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "model"
+        },
+        {
+          "pointer": "/model/registry/entries/model/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/open/data/submachine",
+          "value": "lifecycle-recovery"
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_STATE_SUBMACHINE_STATES",
           "severity": "error",
           "subject_id": "open"
         }
-      ]
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     }
   ]
 }

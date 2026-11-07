@@ -41,7 +41,6 @@ pub fn conforms_to(specific: &str, general: &str) -> bool {
     };
     super::schema::conforms_to(specific.id, general.id) == Ok(true)
 }
-
 '''
 
 

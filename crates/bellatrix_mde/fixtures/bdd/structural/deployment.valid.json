@@ -1,439 +1,826 @@
 {
-  "schema_version": 1,
+  "schemaVersion": 2,
   "id": "deployment-project",
   "name": "Two-tier production deployment",
-  "root_model": "root",
-  "elements": [
-    {
-      "id": "root",
-      "kind": "uml.model",
-      "name": "Two-tier production deployment",
-      "properties": {}
-    },
-    {
-      "id": "host",
-      "kind": "uml.device",
-      "name": "ProductionHost",
-      "properties": {}
-    },
-    {
-      "id": "runtime",
-      "kind": "uml.execution_environment",
-      "name": "ApplicationRuntime",
-      "properties": {}
-    },
-    {
-      "id": "database-host",
-      "kind": "uml.device",
-      "name": "DatabaseHost",
-      "properties": {}
-    },
-    {
-      "id": "database-runtime",
-      "kind": "uml.execution_environment",
-      "name": "DatabaseRuntime",
-      "properties": {}
-    },
-    {
-      "id": "service",
-      "kind": "uml.component",
-      "name": "OrderService",
-      "properties": {}
-    },
-    {
-      "id": "artifact",
-      "kind": "uml.artifact",
-      "name": "orders.jar",
-      "properties": {
-        "fileName": "orders.jar"
-      }
-    },
-    {
-      "id": "schema",
-      "kind": "uml.artifact",
-      "name": "orders-schema.sql",
-      "properties": {
-        "fileName": "orders-schema.sql"
-      }
-    },
-    {
-      "id": "specification",
-      "kind": "uml.deployment_specification",
-      "name": "ProductionConfig",
-      "properties": {
-        "visibility": null,
-        "executionLocation": "/srv/orders",
-        "deploymentLocation": "/opt/orders"
-      }
-    },
-    {
-      "id": "network",
-      "kind": "uml.communication_path",
-      "name": "DatabaseNetwork",
-      "properties": {
-        "memberEnd": [
-          {
-            "$ref": "network-app"
-          },
-          {
-            "$ref": "network-db"
+  "model": {
+    "registry": {
+      "entries": {
+        "artifact": {
+          "id": "artifact",
+          "type": "Artifact",
+          "data": {
+            "id": "artifact",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "orders.jar",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "fileName": "orders.jar",
+            "nestedArtifact": [],
+            "manifestation": [
+              "manifestation"
+            ],
+            "ownedOperation": [],
+            "ownedAttribute": []
           }
-        ]
-      }
-    },
-    {
-      "id": "network-app",
-      "kind": "uml.attribute",
-      "name": "application",
-      "properties": {
-        "type": {
-          "$ref": "host"
         },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "network-db",
-      "kind": "uml.attribute",
-      "name": "database",
-      "properties": {
-        "type": {
-          "$ref": "database-host"
-        },
-        "multiplicity": "1"
-      }
-    }
-  ],
-  "relations": [
-    {
-      "id": "owns-host",
-      "kind": "owns",
-      "from": "root",
-      "to": "host",
-      "properties": {}
-    },
-    {
-      "id": "owns-runtime",
-      "kind": "owns",
-      "from": "host",
-      "to": "runtime",
-      "properties": {}
-    },
-    {
-      "id": "owns-database-host",
-      "kind": "owns",
-      "from": "root",
-      "to": "database-host",
-      "properties": {}
-    },
-    {
-      "id": "owns-database-runtime",
-      "kind": "owns",
-      "from": "database-host",
-      "to": "database-runtime",
-      "properties": {}
-    },
-    {
-      "id": "owns-service",
-      "kind": "owns",
-      "from": "root",
-      "to": "service",
-      "properties": {}
-    },
-    {
-      "id": "owns-artifact",
-      "kind": "owns",
-      "from": "root",
-      "to": "artifact",
-      "properties": {}
-    },
-    {
-      "id": "owns-schema",
-      "kind": "owns",
-      "from": "root",
-      "to": "schema",
-      "properties": {}
-    },
-    {
-      "id": "deployment",
-      "kind": "uml.deployment",
-      "from": "runtime",
-      "to": "artifact",
-      "properties": {
-        "visibility": null,
-        "deployedArtifact": [
-          {
-            "$ref": "artifact"
+        "database-host": {
+          "id": "database-host",
+          "type": "Device",
+          "data": {
+            "id": "database-host",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "DatabaseHost",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [
+              "database-runtime"
+            ],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "deployment": [],
+            "nestedNode": []
           }
-        ]
-      }
-    },
-    {
-      "id": "owns-deployment",
-      "kind": "owns",
-      "from": "runtime",
-      "to": "deployment",
-      "properties": {}
-    },
-    {
-      "id": "owns-specification",
-      "kind": "owns",
-      "from": "deployment",
-      "to": "specification",
-      "properties": {}
-    },
-    {
-      "id": "manifestation",
-      "kind": "uml.manifestation",
-      "from": "artifact",
-      "to": "service",
-      "properties": {
-        "utilizedElement": {
-          "$ref": "service"
         },
-        "visibility": null
-      }
-    },
-    {
-      "id": "owns-manifestation",
-      "kind": "owns",
-      "from": "artifact",
-      "to": "manifestation",
-      "properties": {}
-    },
-    {
-      "id": "schema-deployment",
-      "kind": "uml.deployment",
-      "from": "database-runtime",
-      "to": "schema",
-      "properties": {
-        "visibility": null,
-        "deployedArtifact": [
-          {
-            "$ref": "schema"
+        "database-runtime": {
+          "id": "database-runtime",
+          "type": "ExecutionEnvironment",
+          "data": {
+            "id": "database-runtime",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "DatabaseRuntime",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "deployment": [
+              "schema-deployment"
+            ],
+            "nestedNode": []
           }
-        ]
-      }
-    },
-    {
-      "id": "owns-schema-deployment",
-      "kind": "owns",
-      "from": "database-runtime",
-      "to": "schema-deployment",
-      "properties": {}
-    },
-    {
-      "id": "owns-network",
-      "kind": "owns",
-      "from": "root",
-      "to": "network"
-    },
-    {
-      "id": "owns-network-app",
-      "kind": "owns",
-      "from": "network",
-      "to": "network-app"
-    },
-    {
-      "id": "owns-network-db",
-      "kind": "owns",
-      "from": "network",
-      "to": "network-db"
-    }
-  ],
-  "diagrams": [
-    {
-      "id": "diagram",
-      "name": "Two-tier production deployment",
-      "uml_di_type": "UMLDeploymentDiagram",
-      "width": 1240,
-      "height": 800,
-      "model_elements": [],
-      "views": [
-        {
-          "id": "view-host",
-          "subject": "host",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
         },
-        {
-          "id": "view-runtime",
-          "subject": "runtime",
-          "geometry": {
-            "kind": "rect",
-            "x": 325,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
+        "deployment": {
+          "id": "deployment",
+          "type": "Deployment",
+          "data": {
+            "id": "deployment",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "supplier": [
+              "artifact"
+            ],
+            "client": [
+              "runtime"
+            ],
+            "deployedArtifact": [
+              "artifact"
+            ],
+            "configuration": [
+              "specification"
+            ],
+            "location": "runtime"
+          }
         },
-        {
-          "id": "view-database-host",
-          "subject": "database-host",
-          "geometry": {
-            "kind": "rect",
-            "x": 610,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
+        "host": {
+          "id": "host",
+          "type": "Device",
+          "data": {
+            "id": "host",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "ProductionHost",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [
+              "runtime"
+            ],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "deployment": [],
+            "nestedNode": []
+          }
         },
-        {
-          "id": "view-database-runtime",
-          "subject": "database-runtime",
-          "geometry": {
-            "kind": "rect",
-            "x": 895,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
+        "manifestation": {
+          "id": "manifestation",
+          "type": "Manifestation",
+          "data": {
+            "id": "manifestation",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "supplier": [
+              "service"
+            ],
+            "client": [
+              "artifact"
+            ],
+            "mapping": null,
+            "utilizedElement": "service"
+          }
         },
-        {
-          "id": "view-service",
-          "subject": "service",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
+        "network": {
+          "id": "network",
+          "type": "CommunicationPath",
+          "data": {
+            "id": "network",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "DatabaseNetwork",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedEnd": [
+              "network-app",
+              "network-db"
+            ],
+            "memberEnd": [
+              "network-app",
+              "network-db"
+            ],
+            "isDerived": "false",
+            "navigableOwnedEnd": []
+          }
         },
-        {
-          "id": "view-artifact",
-          "subject": "artifact",
-          "geometry": {
-            "kind": "rect",
-            "x": 325,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
+        "network-app": {
+          "id": "network-app",
+          "type": "Property",
+          "data": {
+            "id": "network-app",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "application",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "host",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "network-app-upperValue-value",
+            "lowerValue": "network-app-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": "network",
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
         },
-        {
-          "id": "view-schema",
-          "subject": "schema",
-          "geometry": {
-            "kind": "rect",
-            "x": 610,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
+        "network-app-lowerValue-value": {
+          "id": "network-app-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "network-app-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         },
-        {
-          "id": "view-specification",
-          "subject": "specification",
-          "geometry": {
-            "kind": "rect",
-            "x": 895,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
+        "network-app-upperValue-value": {
+          "id": "network-app-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "network-app-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         },
-        {
-          "id": "view-deployment",
-          "subject": "deployment",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 565,
-              "y": 105
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 325,
-                  "y": 285
-                }
-              }
-            ]
-          },
-          "endpoints": {
-            "source_view_id": "view-runtime",
-            "target_view_id": "view-artifact"
-          },
-          "z_index": 1
+        "network-db": {
+          "id": "network-db",
+          "type": "Property",
+          "data": {
+            "id": "network-db",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "database",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "database-host",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "network-db-upperValue-value",
+            "lowerValue": "network-db-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": "network",
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
         },
-        {
-          "id": "view-manifestation",
-          "subject": "manifestation",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 565,
-              "y": 285
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 40,
-                  "y": 285
-                }
-              }
-            ]
-          },
-          "endpoints": {
-            "source_view_id": "view-artifact",
-            "target_view_id": "view-service"
-          },
-          "z_index": 1
+        "network-db-lowerValue-value": {
+          "id": "network-db-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "network-db-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         },
-        {
-          "id": "view-schema-deployment",
-          "subject": "schema-deployment",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1135,
-              "y": 105
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 610,
-                  "y": 285
-                }
-              }
-            ]
-          },
-          "endpoints": {
-            "source_view_id": "view-database-runtime",
-            "target_view_id": "view-schema"
-          },
-          "z_index": 1
+        "network-db-upperValue-value": {
+          "id": "network-db-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "network-db-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
         },
-        {
-          "id": "view-network",
-          "subject": "network",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 400,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
+        "root": {
+          "id": "root",
+          "type": "Model",
+          "data": {
+            "id": "root",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Two-tier production deployment",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "host",
+              "database-host",
+              "service",
+              "artifact",
+              "schema",
+              "network"
+            ],
+            "profileApplication": [],
+            "viewpoint": null
+          }
+        },
+        "runtime": {
+          "id": "runtime",
+          "type": "ExecutionEnvironment",
+          "data": {
+            "id": "runtime",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "ApplicationRuntime",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "deployment": [
+              "deployment"
+            ],
+            "nestedNode": []
+          }
+        },
+        "schema": {
+          "id": "schema",
+          "type": "Artifact",
+          "data": {
+            "id": "schema",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "orders-schema.sql",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "fileName": "orders-schema.sql",
+            "nestedArtifact": [],
+            "manifestation": [],
+            "ownedOperation": [],
+            "ownedAttribute": []
+          }
+        },
+        "schema-deployment": {
+          "id": "schema-deployment",
+          "type": "Deployment",
+          "data": {
+            "id": "schema-deployment",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "supplier": [
+              "schema"
+            ],
+            "client": [
+              "database-runtime"
+            ],
+            "deployedArtifact": [
+              "schema"
+            ],
+            "configuration": [],
+            "location": "database-runtime"
+          }
+        },
+        "service": {
+          "id": "service",
+          "type": "Component",
+          "data": {
+            "id": "service",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "OrderService",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "isIndirectlyInstantiated": "true",
+            "packagedElement": [],
+            "realization": []
+          }
+        },
+        "specification": {
+          "id": "specification",
+          "type": "DeploymentSpecification",
+          "data": {
+            "id": "specification",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "ProductionConfig",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "fileName": null,
+            "nestedArtifact": [],
+            "manifestation": [],
+            "ownedOperation": [],
+            "ownedAttribute": [],
+            "deploymentLocation": "/opt/orders",
+            "executionLocation": "/srv/orders",
+            "deployment": "deployment"
+          }
         }
-      ]
-    }
-  ]
+      }
+    },
+    "rootModel": "root",
+    "diagrams": [
+      {
+        "id": "diagram",
+        "name": "Two-tier production deployment",
+        "uml_di_type": "UMLDeploymentDiagram",
+        "width": 1240,
+        "height": 800,
+        "model_elements": [],
+        "views": [
+          {
+            "id": "view-host",
+            "subject": "host",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-runtime",
+            "subject": "runtime",
+            "geometry": {
+              "kind": "rect",
+              "x": 325,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-database-host",
+            "subject": "database-host",
+            "geometry": {
+              "kind": "rect",
+              "x": 610,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-database-runtime",
+            "subject": "database-runtime",
+            "geometry": {
+              "kind": "rect",
+              "x": 895,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-service",
+            "subject": "service",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-artifact",
+            "subject": "artifact",
+            "geometry": {
+              "kind": "rect",
+              "x": 325,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-schema",
+            "subject": "schema",
+            "geometry": {
+              "kind": "rect",
+              "x": 610,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-specification",
+            "subject": "specification",
+            "geometry": {
+              "kind": "rect",
+              "x": 895,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-deployment",
+            "subject": "deployment",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 565,
+                "y": 105
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 325,
+                    "y": 285
+                  }
+                }
+              ]
+            },
+            "endpoints": {
+              "source_view_id": "view-runtime",
+              "target_view_id": "view-artifact"
+            },
+            "z_index": 1
+          },
+          {
+            "id": "view-manifestation",
+            "subject": "manifestation",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 565,
+                "y": 285
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 40,
+                    "y": 285
+                  }
+                }
+              ]
+            },
+            "endpoints": {
+              "source_view_id": "view-artifact",
+              "target_view_id": "view-service"
+            },
+            "z_index": 1
+          },
+          {
+            "id": "view-schema-deployment",
+            "subject": "schema-deployment",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1135,
+                "y": 105
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 610,
+                    "y": 285
+                  }
+                }
+              ]
+            },
+            "endpoints": {
+              "source_view_id": "view-database-runtime",
+              "target_view_id": "view-schema"
+            },
+            "z_index": 1
+          },
+          {
+            "id": "view-network",
+            "subject": "network",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 400,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          }
+        ]
+      }
+    ]
+  }
 }

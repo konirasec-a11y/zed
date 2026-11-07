@@ -2,69 +2,75 @@
   "cases": [
     {
       "id": "sequence-valid",
-      "file": "sequence.valid.json",
       "diagram_kind": "sequence",
       "diagram_id": "sequence-diagram",
       "expected": "valid",
-      "diagnostics": []
+      "historical_diagnostics": [],
+      "acceptance": "Pending contract representation. The unchanged Gherkin requirement is retained, but this example must not report successful persistence until its original intent is representable.",
+      "pending_reason": "Pending: ruml Message has no signature field and MessageOccurrenceSpecification requires event; moving the operation to an invented event has not been shown equivalent."
     },
     {
       "id": "sequence-invalid",
-      "file": "sequence.invalid.json",
       "diagram_kind": "sequence",
       "diagram_id": "sequence-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "historical_diagnostics": [
         {
           "code": "UML_PROPERTY_CONTRACT",
           "severity": "error",
           "subject_id": "submit"
         }
-      ]
+      ],
+      "acceptance": "Pending contract representation. The unchanged Gherkin requirement is retained, but this example must not report successful persistence until its original intent is representable.",
+      "pending_reason": "Pending: ruml Message has no signature field and MessageOccurrenceSpecification requires event; moving the operation to an invented event has not been shown equivalent."
     },
     {
       "id": "communication-valid",
-      "file": "communication.valid.json",
       "diagram_kind": "communication",
       "diagram_id": "communication-diagram",
       "expected": "valid",
-      "diagnostics": []
+      "historical_diagnostics": [],
+      "acceptance": "Pending contract representation. The unchanged Gherkin requirement is retained, but this example must not report successful persistence until its original intent is representable.",
+      "pending_reason": "Pending: ruml Message has no signature field and MessageOccurrenceSpecification requires event; moving the operation to an invented event has not been shown equivalent."
     },
     {
       "id": "communication-invalid",
-      "file": "communication.invalid.json",
       "diagram_kind": "communication",
       "diagram_id": "communication-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "historical_diagnostics": [
         {
           "code": "UML_PROPERTY_CONTRACT",
           "severity": "error",
           "subject_id": "service"
         }
-      ]
+      ],
+      "acceptance": "Pending contract representation. The unchanged Gherkin requirement is retained, but this example must not report successful persistence until its original intent is representable.",
+      "pending_reason": "Pending: ruml Message has no signature field and MessageOccurrenceSpecification requires event; moving the operation to an invented event has not been shown equivalent."
     },
     {
       "id": "timing-valid",
-      "file": "timing.valid.json",
       "diagram_kind": "timing",
       "diagram_id": "timing-diagram",
       "expected": "valid",
-      "diagnostics": []
+      "historical_diagnostics": [],
+      "acceptance": "Pending contract representation. The unchanged Gherkin requirement is retained, but this example must not report successful persistence until its original intent is representable.",
+      "pending_reason": "Pending: ruml Message has no signature field and MessageOccurrenceSpecification requires event; moving the operation to an invented event has not been shown equivalent."
     },
     {
       "id": "timing-invalid",
-      "file": "timing.invalid.json",
       "diagram_kind": "timing",
       "diagram_id": "timing-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "historical_diagnostics": [
         {
           "code": "UML_DURATION_CONSTRAINT_FIRST_EVENT",
           "severity": "error",
           "subject_id": "latency"
         }
-      ]
+      ],
+      "acceptance": "Pending contract representation. The unchanged Gherkin requirement is retained, but this example must not report successful persistence until its original intent is representable.",
+      "pending_reason": "Pending: ruml Message has no signature field and MessageOccurrenceSpecification requires event; moving the operation to an invented event has not been shown equivalent."
     },
     {
       "id": "interaction_overview-valid",
@@ -72,7 +78,162 @@
       "diagram_kind": "interaction_overview",
       "diagram_id": "overview-diagram",
       "expected": "valid",
-      "diagnostics": []
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/auth-call/type",
+          "value": "CallBehaviorAction"
+        },
+        {
+          "pointer": "/model/registry/entries/auth-decision/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/auth-decision-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/auth-decision-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/authenticate/type",
+          "value": "Interaction"
+        },
+        {
+          "pointer": "/model/registry/entries/authorized/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/authorized-guard/type",
+          "value": "OpaqueExpression"
+        },
+        {
+          "pointer": "/model/registry/entries/authorized-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/customer/type",
+          "value": "Lifeline"
+        },
+        {
+          "pointer": "/model/registry/entries/customer-role/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/customer-type/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/decision/type",
+          "value": "DecisionNode"
+        },
+        {
+          "pointer": "/model/registry/entries/denied/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/denied-guard/type",
+          "value": "OpaqueExpression"
+        },
+        {
+          "pointer": "/model/registry/entries/denied-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/final/type",
+          "value": "ActivityFinalNode"
+        },
+        {
+          "pointer": "/model/registry/entries/finish-order/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/finish-order-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/finish-order-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow/type",
+          "value": "Activity"
+        },
+        {
+          "pointer": "/model/registry/entries/fulfill/type",
+          "value": "Interaction"
+        },
+        {
+          "pointer": "/model/registry/entries/fulfill-call/type",
+          "value": "CallBehaviorAction"
+        },
+        {
+          "pointer": "/model/registry/entries/initial/type",
+          "value": "InitialNode"
+        },
+        {
+          "pointer": "/model/registry/entries/interaction/type",
+          "value": "Interaction"
+        },
+        {
+          "pointer": "/model/registry/entries/service/type",
+          "value": "Lifeline"
+        },
+        {
+          "pointer": "/model/registry/entries/service-role/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/service-type/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/start-auth/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/start-auth-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/start-auth-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/stock/type",
+          "value": "Lifeline"
+        },
+        {
+          "pointer": "/model/registry/entries/stock-role/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/stock-type/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/system/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/use-authenticate/type",
+          "value": "InteractionUse"
+        },
+        {
+          "pointer": "/model/registry/entries/use-fulfill/type",
+          "value": "InteractionUse"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "interaction_overview-invalid",
@@ -80,13 +241,28 @@
       "diagram_kind": "interaction_overview",
       "diagram_id": "overview-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/use-authenticate/data/refersTo",
+          "value": "system"
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_PROPERTY_CONTRACT",
           "severity": "error",
           "subject_id": "use-authenticate"
         }
-      ]
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     }
   ]
 }

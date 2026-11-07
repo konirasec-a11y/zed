@@ -1,1119 +1,1819 @@
 {
-  "schema_version": 1,
+  "schemaVersion": 2,
   "id": "activity-project",
   "name": "Activity",
-  "root_model": "root",
-  "elements": [
-    {
-      "id": "root",
-      "kind": "uml.model",
-      "name": "Behavioral acceptance corpus",
-      "properties": {}
-    },
-    {
-      "id": "fulfillment",
-      "kind": "uml.activity",
-      "name": "Fulfill order",
-      "properties": {
-        "isReadOnly": false
-      }
-    },
-    {
-      "id": "order",
-      "kind": "uml.class",
-      "name": "Order",
-      "properties": {}
-    },
-    {
-      "id": "start",
-      "kind": "uml.initial_node",
-      "name": "Start",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        }
-      }
-    },
-    {
-      "id": "receive",
-      "kind": "uml.opaque_action",
-      "name": "Receive order",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "outputValue": [
-          {
-            "$ref": "order-output"
+  "model": {
+    "registry": {
+      "entries": {
+        "charge": {
+          "id": "charge",
+          "type": "OpaqueAction",
+          "data": {
+            "id": "charge",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Charge customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "handler": [],
+            "localPrecondition": [],
+            "localPostcondition": [],
+            "body": [],
+            "language": [],
+            "inputValue": [],
+            "outputValue": []
           }
-        ]
-      }
-    },
-    {
-      "id": "check",
-      "kind": "uml.decision_node",
-      "name": "Stock available?",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        }
-      }
-    },
-    {
-      "id": "parallel",
-      "kind": "uml.fork_node",
-      "name": "Prepare in parallel",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        }
-      }
-    },
-    {
-      "id": "reserve",
-      "kind": "uml.opaque_action",
-      "name": "Reserve stock",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
         },
-        "inPartition": [
-          {
-            "$ref": "warehouse"
+        "check": {
+          "id": "check",
+          "type": "DecisionNode",
+          "data": {
+            "id": "check",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Stock available?",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "decisionInput": null
           }
+        },
+        "finish": {
+          "id": "finish",
+          "type": "ActivityFinalNode",
+          "data": {
+            "id": "finish",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Completed",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": []
+          }
+        },
+        "flow-1": {
+          "id": "flow-1",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-1",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "start",
+            "target": "receive",
+            "guard": "flow-1-guard-value",
+            "weight": "flow-1-weight-value"
+          }
+        },
+        "flow-1-guard-value": {
+          "id": "flow-1-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-1-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-1-weight-value": {
+          "id": "flow-1-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-1-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-10": {
+          "id": "flow-10",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-10",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "ship",
+            "target": "merge",
+            "guard": "flow-10-guard-value",
+            "weight": "flow-10-weight-value"
+          }
+        },
+        "flow-10-guard-value": {
+          "id": "flow-10-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-10-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-10-weight-value": {
+          "id": "flow-10-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-10-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-11": {
+          "id": "flow-11",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-11",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "reject",
+            "target": "merge",
+            "guard": "flow-11-guard-value",
+            "weight": "flow-11-weight-value"
+          }
+        },
+        "flow-11-guard-value": {
+          "id": "flow-11-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-11-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-11-weight-value": {
+          "id": "flow-11-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-11-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-12": {
+          "id": "flow-12",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-12",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "ship",
+            "target": "finish",
+            "guard": "flow-12-guard-value",
+            "weight": "flow-12-weight-value"
+          }
+        },
+        "flow-12-guard-value": {
+          "id": "flow-12-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-12-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-12-weight-value": {
+          "id": "flow-12-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-12-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-2": {
+          "id": "flow-2",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-2",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "receive",
+            "target": "check",
+            "guard": "flow-2-guard-value",
+            "weight": "flow-2-weight-value"
+          }
+        },
+        "flow-2-guard-value": {
+          "id": "flow-2-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-2-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-2-weight-value": {
+          "id": "flow-2-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-2-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-3": {
+          "id": "flow-3",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-3",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "check",
+            "target": "parallel",
+            "guard": "flow-3-guard",
+            "weight": "flow-3-weight-value"
+          }
+        },
+        "flow-3-guard": {
+          "id": "flow-3-guard",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-3-guard",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Stock available",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-3-weight-value": {
+          "id": "flow-3-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-3-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-4": {
+          "id": "flow-4",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-4",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "parallel",
+            "target": "reserve",
+            "guard": "flow-4-guard-value",
+            "weight": "flow-4-weight-value"
+          }
+        },
+        "flow-4-guard-value": {
+          "id": "flow-4-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-4-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-4-weight-value": {
+          "id": "flow-4-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-4-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-5": {
+          "id": "flow-5",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-5",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "parallel",
+            "target": "charge",
+            "guard": "flow-5-guard-value",
+            "weight": "flow-5-weight-value"
+          }
+        },
+        "flow-5-guard-value": {
+          "id": "flow-5-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-5-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-5-weight-value": {
+          "id": "flow-5-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-5-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-6": {
+          "id": "flow-6",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-6",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "reserve",
+            "target": "synchronize",
+            "guard": "flow-6-guard-value",
+            "weight": "flow-6-weight-value"
+          }
+        },
+        "flow-6-guard-value": {
+          "id": "flow-6-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-6-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-6-weight-value": {
+          "id": "flow-6-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-6-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-7": {
+          "id": "flow-7",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-7",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "charge",
+            "target": "synchronize",
+            "guard": "flow-7-guard-value",
+            "weight": "flow-7-weight-value"
+          }
+        },
+        "flow-7-guard-value": {
+          "id": "flow-7-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-7-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-7-weight-value": {
+          "id": "flow-7-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-7-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-8": {
+          "id": "flow-8",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-8",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "synchronize",
+            "target": "ship",
+            "guard": "flow-8-guard-value",
+            "weight": "flow-8-weight-value"
+          }
+        },
+        "flow-8-guard-value": {
+          "id": "flow-8-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-8-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "flow-8-weight-value": {
+          "id": "flow-8-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-8-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow-9": {
+          "id": "flow-9",
+          "type": "ControlFlow",
+          "data": {
+            "id": "flow-9",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "source": "check",
+            "target": "reject",
+            "guard": "flow-9-guard",
+            "weight": "flow-9-weight-value"
+          }
+        },
+        "flow-9-guard": {
+          "id": "flow-9-guard",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "flow-9-guard",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "No stock",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "false"
+          }
+        },
+        "flow-9-weight-value": {
+          "id": "flow-9-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "flow-9-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "fulfillment": {
+          "id": "fulfillment",
+          "type": "Activity",
+          "data": {
+            "id": "fulfillment",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Fulfill order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "isReentrant": "true",
+            "redefinedBehavior": [],
+            "ownedParameter": [],
+            "precondition": [],
+            "postcondition": [],
+            "ownedParameterSet": [],
+            "specification": null,
+            "variable": [],
+            "node": [
+              "start",
+              "receive",
+              "check",
+              "parallel",
+              "reserve",
+              "charge",
+              "synchronize",
+              "ship",
+              "reject",
+              "merge",
+              "finish"
+            ],
+            "isReadOnly": "false",
+            "edge": [
+              "flow-1",
+              "flow-2",
+              "flow-3",
+              "flow-4",
+              "flow-5",
+              "flow-6",
+              "flow-7",
+              "flow-8",
+              "flow-9",
+              "flow-10",
+              "flow-11",
+              "flow-12",
+              "order-data"
+            ],
+            "partition": [],
+            "isSingleExecution": "false",
+            "group": [
+              "warehouse"
+            ]
+          }
+        },
+        "merge": {
+          "id": "merge",
+          "type": "MergeNode",
+          "data": {
+            "id": "merge",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Finish either outcome",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": []
+          }
+        },
+        "order": {
+          "id": "order",
+          "type": "Class",
+          "data": {
+            "id": "order",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "order-data": {
+          "id": "order-data",
+          "type": "ObjectFlow",
+          "data": {
+            "id": "order-data",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "isMulticast": "false",
+            "isMultireceive": "false",
+            "transformation": null,
+            "selection": null,
+            "source": "order-output",
+            "target": "order-input",
+            "guard": "order-data-guard-value",
+            "weight": "order-data-weight-value"
+          }
+        },
+        "order-data-guard-value": {
+          "id": "order-data-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "order-data-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "order-data-weight-value": {
+          "id": "order-data-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "order-data-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "order-input": {
+          "id": "order-input",
+          "type": "InputPin",
+          "data": {
+            "id": "order-input",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": null,
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "type": "order",
+            "ordering": "Fifo",
+            "isControlType": "false",
+            "inState": [],
+            "selection": null,
+            "isOrdered": "false",
+            "isUnique": "false",
+            "upperValue": null,
+            "lowerValue": null,
+            "isControl": "false",
+            "upperBound": "order-input-upperBound-value"
+          }
+        },
+        "order-input-upperBound-value": {
+          "id": "order-input-upperBound-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "order-input-upperBound-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "*"
+          }
+        },
+        "order-output": {
+          "id": "order-output",
+          "type": "OutputPin",
+          "data": {
+            "id": "order-output",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": null,
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "type": "order",
+            "ordering": "Fifo",
+            "isControlType": "false",
+            "inState": [],
+            "selection": null,
+            "isOrdered": "false",
+            "isUnique": "false",
+            "upperValue": null,
+            "lowerValue": null,
+            "isControl": "false",
+            "upperBound": "order-output-upperBound-value"
+          }
+        },
+        "order-output-upperBound-value": {
+          "id": "order-output-upperBound-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "order-output-upperBound-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "*"
+          }
+        },
+        "parallel": {
+          "id": "parallel",
+          "type": "ForkNode",
+          "data": {
+            "id": "parallel",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Prepare in parallel",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": []
+          }
+        },
+        "receive": {
+          "id": "receive",
+          "type": "OpaqueAction",
+          "data": {
+            "id": "receive",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Receive order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "handler": [],
+            "localPrecondition": [],
+            "localPostcondition": [],
+            "body": [],
+            "language": [],
+            "inputValue": [],
+            "outputValue": [
+              "order-output"
+            ]
+          }
+        },
+        "reject": {
+          "id": "reject",
+          "type": "OpaqueAction",
+          "data": {
+            "id": "reject",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Reject order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "handler": [],
+            "localPrecondition": [],
+            "localPostcondition": [],
+            "body": [],
+            "language": [],
+            "inputValue": [],
+            "outputValue": []
+          }
+        },
+        "reserve": {
+          "id": "reserve",
+          "type": "OpaqueAction",
+          "data": {
+            "id": "reserve",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Reserve stock",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [
+              "warehouse"
+            ],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "handler": [],
+            "localPrecondition": [],
+            "localPostcondition": [],
+            "body": [],
+            "language": [],
+            "inputValue": [
+              "order-input"
+            ],
+            "outputValue": []
+          }
+        },
+        "root": {
+          "id": "root",
+          "type": "Model",
+          "data": {
+            "id": "root",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Behavioral acceptance corpus",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "fulfillment",
+              "order"
+            ],
+            "profileApplication": [],
+            "viewpoint": null
+          }
+        },
+        "ship": {
+          "id": "ship",
+          "type": "OpaqueAction",
+          "data": {
+            "id": "ship",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Ship order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [
+              "warehouse"
+            ],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "handler": [],
+            "localPrecondition": [],
+            "localPostcondition": [],
+            "body": [],
+            "language": [],
+            "inputValue": [],
+            "outputValue": []
+          }
+        },
+        "start": {
+          "id": "start",
+          "type": "InitialNode",
+          "data": {
+            "id": "start",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Start",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": []
+          }
+        },
+        "synchronize": {
+          "id": "synchronize",
+          "type": "JoinNode",
+          "data": {
+            "id": "synchronize",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Ready to ship",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "fulfillment",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "isCombineDuplicate": "true",
+            "joinSpec": "synchronize-joinSpec-value"
+          }
+        },
+        "synchronize-joinSpec-value": {
+          "id": "synchronize-joinSpec-value",
+          "type": "OpaqueExpression",
+          "data": {
+            "id": "synchronize-joinSpec-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "body": [
+              "and"
+            ],
+            "language": [
+              "UML"
+            ],
+            "behavior": null
+          }
+        },
+        "warehouse": {
+          "id": "warehouse",
+          "type": "ActivityPartition",
+          "data": {
+            "id": "warehouse",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Warehouse",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "inActivity": "fulfillment",
+            "isDimension": "false",
+            "isExternal": "false",
+            "node": [
+              "reserve",
+              "ship"
+            ],
+            "subpartition": [],
+            "superPartition": null,
+            "represents": null,
+            "edge": []
+          }
+        }
+      }
+    },
+    "rootModel": "root",
+    "diagrams": [
+      {
+        "id": "activity-diagram",
+        "name": "Activity",
+        "uml_di_type": "UMLActivityDiagram",
+        "width": 1800,
+        "height": 1200,
+        "model_elements": [
+          "fulfillment"
         ],
-        "inputValue": [
+        "views": [
           {
-            "$ref": "order-input"
+            "id": "view-fulfillment",
+            "subject": "fulfillment",
+            "geometry": {
+              "kind": "rect",
+              "x": 80,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-start",
+            "subject": "start",
+            "geometry": {
+              "kind": "rect",
+              "x": 400,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-receive",
+            "subject": "receive",
+            "geometry": {
+              "kind": "rect",
+              "x": 720,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-check",
+            "subject": "check",
+            "geometry": {
+              "kind": "rect",
+              "x": 1040,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-parallel",
+            "subject": "parallel",
+            "geometry": {
+              "kind": "rect",
+              "x": 1360,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-reserve",
+            "subject": "reserve",
+            "geometry": {
+              "kind": "rect",
+              "x": 80,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-charge",
+            "subject": "charge",
+            "geometry": {
+              "kind": "rect",
+              "x": 400,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-synchronize",
+            "subject": "synchronize",
+            "geometry": {
+              "kind": "rect",
+              "x": 720,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-ship",
+            "subject": "ship",
+            "geometry": {
+              "kind": "rect",
+              "x": 1040,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-reject",
+            "subject": "reject",
+            "geometry": {
+              "kind": "rect",
+              "x": 1360,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-merge",
+            "subject": "merge",
+            "geometry": {
+              "kind": "rect",
+              "x": 80,
+              "y": 440,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-finish",
+            "subject": "finish",
+            "geometry": {
+              "kind": "rect",
+              "x": 400,
+              "y": 440,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-warehouse",
+            "subject": "warehouse",
+            "geometry": {
+              "kind": "rect",
+              "x": 720,
+              "y": 440,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-order-output",
+            "subject": "order-output",
+            "geometry": {
+              "kind": "rect",
+              "x": 1040,
+              "y": 440,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-order-input",
+            "subject": "order-input",
+            "geometry": {
+              "kind": "rect",
+              "x": 1360,
+              "y": 440,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-flow-1",
+            "subject": "flow-1",
+            "endpoints": {
+              "source_view_id": "view-start",
+              "target_view_id": "view-receive"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 620,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 720,
+                    "y": 130
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-2",
+            "subject": "flow-2",
+            "endpoints": {
+              "source_view_id": "view-receive",
+              "target_view_id": "view-check"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 940,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1040,
+                    "y": 130
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-3",
+            "subject": "flow-3",
+            "endpoints": {
+              "source_view_id": "view-check",
+              "target_view_id": "view-parallel"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1260,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1360,
+                    "y": 130
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-4",
+            "subject": "flow-4",
+            "endpoints": {
+              "source_view_id": "view-parallel",
+              "target_view_id": "view-reserve"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1580,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 80,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-5",
+            "subject": "flow-5",
+            "endpoints": {
+              "source_view_id": "view-parallel",
+              "target_view_id": "view-charge"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1580,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 400,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-6",
+            "subject": "flow-6",
+            "endpoints": {
+              "source_view_id": "view-reserve",
+              "target_view_id": "view-synchronize"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 300,
+                "y": 310
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 720,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-7",
+            "subject": "flow-7",
+            "endpoints": {
+              "source_view_id": "view-charge",
+              "target_view_id": "view-synchronize"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 620,
+                "y": 310
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 720,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-8",
+            "subject": "flow-8",
+            "endpoints": {
+              "source_view_id": "view-synchronize",
+              "target_view_id": "view-ship"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 940,
+                "y": 310
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1040,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-9",
+            "subject": "flow-9",
+            "endpoints": {
+              "source_view_id": "view-check",
+              "target_view_id": "view-reject"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1260,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1360,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-10",
+            "subject": "flow-10",
+            "endpoints": {
+              "source_view_id": "view-ship",
+              "target_view_id": "view-merge"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1260,
+                "y": 310
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 80,
+                    "y": 490
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-11",
+            "subject": "flow-11",
+            "endpoints": {
+              "source_view_id": "view-reject",
+              "target_view_id": "view-merge"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1580,
+                "y": 310
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 80,
+                    "y": 490
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-flow-12",
+            "subject": "flow-12",
+            "endpoints": {
+              "source_view_id": "view-ship",
+              "target_view_id": "view-finish"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 300,
+                "y": 490
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 400,
+                    "y": 490
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-order-data",
+            "subject": "order-data",
+            "endpoints": {
+              "source_view_id": "view-order-output",
+              "target_view_id": "view-order-input"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1260,
+                "y": 490
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1360,
+                    "y": 490
+                  }
+                }
+              ]
+            }
           }
         ]
       }
-    },
-    {
-      "id": "charge",
-      "kind": "uml.opaque_action",
-      "name": "Charge customer",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        }
-      }
-    },
-    {
-      "id": "synchronize",
-      "kind": "uml.join_node",
-      "name": "Ready to ship",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        }
-      }
-    },
-    {
-      "id": "ship",
-      "kind": "uml.opaque_action",
-      "name": "Ship order",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "inPartition": [
-          {
-            "$ref": "warehouse"
-          }
-        ]
-      }
-    },
-    {
-      "id": "reject",
-      "kind": "uml.opaque_action",
-      "name": "Reject order",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        }
-      }
-    },
-    {
-      "id": "merge",
-      "kind": "uml.merge_node",
-      "name": "Finish either outcome",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        }
-      }
-    },
-    {
-      "id": "finish",
-      "kind": "uml.activity_final_node",
-      "name": "Completed",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        }
-      }
-    },
-    {
-      "id": "warehouse",
-      "kind": "uml.activity_partition",
-      "name": "Warehouse",
-      "properties": {
-        "node": [
-          {
-            "$ref": "reserve"
-          },
-          {
-            "$ref": "ship"
-          }
-        ]
-      }
-    },
-    {
-      "id": "order-output",
-      "kind": "uml.output_pin",
-      "name": "order",
-      "properties": {
-        "type": {
-          "$ref": "order"
-        },
-        "isUnique": false
-      }
-    },
-    {
-      "id": "order-input",
-      "kind": "uml.input_pin",
-      "name": "order",
-      "properties": {
-        "type": {
-          "$ref": "order"
-        },
-        "isUnique": false
-      }
-    },
-    {
-      "id": "flow-3-guard",
-      "kind": "uml.literal_boolean",
-      "name": "Stock available",
-      "properties": {
-        "value": true,
-        "visibility": null
-      }
-    },
-    {
-      "id": "flow-9-guard",
-      "kind": "uml.literal_boolean",
-      "name": "No stock",
-      "properties": {
-        "value": false,
-        "visibility": null
-      }
-    }
-  ],
-  "relations": [
-    {
-      "id": "owns-fulfillment",
-      "kind": "owns",
-      "from": "root",
-      "to": "fulfillment"
-    },
-    {
-      "id": "owns-order",
-      "kind": "owns",
-      "from": "root",
-      "to": "order"
-    },
-    {
-      "id": "owns-start",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "start"
-    },
-    {
-      "id": "owns-receive",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "receive"
-    },
-    {
-      "id": "owns-check",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "check"
-    },
-    {
-      "id": "owns-parallel",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "parallel"
-    },
-    {
-      "id": "owns-reserve",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "reserve"
-    },
-    {
-      "id": "owns-charge",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "charge"
-    },
-    {
-      "id": "owns-synchronize",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "synchronize"
-    },
-    {
-      "id": "owns-ship",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "ship"
-    },
-    {
-      "id": "owns-reject",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "reject"
-    },
-    {
-      "id": "owns-merge",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "merge"
-    },
-    {
-      "id": "owns-finish",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "finish"
-    },
-    {
-      "id": "owns-warehouse",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "warehouse"
-    },
-    {
-      "id": "owns-order-output",
-      "kind": "owns",
-      "from": "receive",
-      "to": "order-output"
-    },
-    {
-      "id": "owns-order-input",
-      "kind": "owns",
-      "from": "reserve",
-      "to": "order-input"
-    },
-    {
-      "id": "flow-1",
-      "kind": "uml.control_flow",
-      "from": "start",
-      "to": "receive",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "start"
-        },
-        "target": {
-          "$ref": "receive"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-1",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-1"
-    },
-    {
-      "id": "flow-2",
-      "kind": "uml.control_flow",
-      "from": "receive",
-      "to": "check",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "receive"
-        },
-        "target": {
-          "$ref": "check"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-2",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-2"
-    },
-    {
-      "id": "owns-flow-3-guard",
-      "kind": "owns",
-      "from": "flow-3",
-      "to": "flow-3-guard"
-    },
-    {
-      "id": "flow-3",
-      "kind": "uml.control_flow",
-      "from": "check",
-      "to": "parallel",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "check"
-        },
-        "target": {
-          "$ref": "parallel"
-        },
-        "guard": {
-          "$ref": "flow-3-guard"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-3",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-3"
-    },
-    {
-      "id": "flow-4",
-      "kind": "uml.control_flow",
-      "from": "parallel",
-      "to": "reserve",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "parallel"
-        },
-        "target": {
-          "$ref": "reserve"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-4",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-4"
-    },
-    {
-      "id": "flow-5",
-      "kind": "uml.control_flow",
-      "from": "parallel",
-      "to": "charge",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "parallel"
-        },
-        "target": {
-          "$ref": "charge"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-5",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-5"
-    },
-    {
-      "id": "flow-6",
-      "kind": "uml.control_flow",
-      "from": "reserve",
-      "to": "synchronize",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "reserve"
-        },
-        "target": {
-          "$ref": "synchronize"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-6",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-6"
-    },
-    {
-      "id": "flow-7",
-      "kind": "uml.control_flow",
-      "from": "charge",
-      "to": "synchronize",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "charge"
-        },
-        "target": {
-          "$ref": "synchronize"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-7",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-7"
-    },
-    {
-      "id": "flow-8",
-      "kind": "uml.control_flow",
-      "from": "synchronize",
-      "to": "ship",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "synchronize"
-        },
-        "target": {
-          "$ref": "ship"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-8",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-8"
-    },
-    {
-      "id": "owns-flow-9-guard",
-      "kind": "owns",
-      "from": "flow-9",
-      "to": "flow-9-guard"
-    },
-    {
-      "id": "flow-9",
-      "kind": "uml.control_flow",
-      "from": "check",
-      "to": "reject",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "check"
-        },
-        "target": {
-          "$ref": "reject"
-        },
-        "guard": {
-          "$ref": "flow-9-guard"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-9",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-9"
-    },
-    {
-      "id": "flow-10",
-      "kind": "uml.control_flow",
-      "from": "ship",
-      "to": "merge",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "ship"
-        },
-        "target": {
-          "$ref": "merge"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-10",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-10"
-    },
-    {
-      "id": "flow-11",
-      "kind": "uml.control_flow",
-      "from": "reject",
-      "to": "merge",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "reject"
-        },
-        "target": {
-          "$ref": "merge"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-11",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-11"
-    },
-    {
-      "id": "flow-12",
-      "kind": "uml.control_flow",
-      "from": "ship",
-      "to": "finish",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "ship"
-        },
-        "target": {
-          "$ref": "finish"
-        }
-      }
-    },
-    {
-      "id": "owns-flow-12",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "flow-12"
-    },
-    {
-      "id": "order-data",
-      "kind": "uml.object_flow",
-      "from": "order-output",
-      "to": "order-input",
-      "properties": {
-        "activity": {
-          "$ref": "fulfillment"
-        },
-        "source": {
-          "$ref": "order-output"
-        },
-        "target": {
-          "$ref": "order-input"
-        }
-      }
-    },
-    {
-      "id": "owns-order-data",
-      "kind": "owns",
-      "from": "fulfillment",
-      "to": "order-data"
-    }
-  ],
-  "diagrams": [
-    {
-      "id": "activity-diagram",
-      "name": "Activity",
-      "uml_di_type": "UMLActivityDiagram",
-      "width": 1800,
-      "height": 1200,
-      "model_elements": [
-        "fulfillment"
-      ],
-      "views": [
-        {
-          "id": "view-fulfillment",
-          "subject": "fulfillment",
-          "geometry": {
-            "kind": "rect",
-            "x": 80,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-start",
-          "subject": "start",
-          "geometry": {
-            "kind": "rect",
-            "x": 400,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-receive",
-          "subject": "receive",
-          "geometry": {
-            "kind": "rect",
-            "x": 720,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-check",
-          "subject": "check",
-          "geometry": {
-            "kind": "rect",
-            "x": 1040,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-parallel",
-          "subject": "parallel",
-          "geometry": {
-            "kind": "rect",
-            "x": 1360,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-reserve",
-          "subject": "reserve",
-          "geometry": {
-            "kind": "rect",
-            "x": 80,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-charge",
-          "subject": "charge",
-          "geometry": {
-            "kind": "rect",
-            "x": 400,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-synchronize",
-          "subject": "synchronize",
-          "geometry": {
-            "kind": "rect",
-            "x": 720,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-ship",
-          "subject": "ship",
-          "geometry": {
-            "kind": "rect",
-            "x": 1040,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-reject",
-          "subject": "reject",
-          "geometry": {
-            "kind": "rect",
-            "x": 1360,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-merge",
-          "subject": "merge",
-          "geometry": {
-            "kind": "rect",
-            "x": 80,
-            "y": 440,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-finish",
-          "subject": "finish",
-          "geometry": {
-            "kind": "rect",
-            "x": 400,
-            "y": 440,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-warehouse",
-          "subject": "warehouse",
-          "geometry": {
-            "kind": "rect",
-            "x": 720,
-            "y": 440,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-order-output",
-          "subject": "order-output",
-          "geometry": {
-            "kind": "rect",
-            "x": 1040,
-            "y": 440,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-order-input",
-          "subject": "order-input",
-          "geometry": {
-            "kind": "rect",
-            "x": 1360,
-            "y": 440,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-flow-1",
-          "subject": "flow-1",
-          "endpoints": {
-            "source_view_id": "view-start",
-            "target_view_id": "view-receive"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 620,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 720,
-                  "y": 130
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-2",
-          "subject": "flow-2",
-          "endpoints": {
-            "source_view_id": "view-receive",
-            "target_view_id": "view-check"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 940,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1040,
-                  "y": 130
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-3",
-          "subject": "flow-3",
-          "endpoints": {
-            "source_view_id": "view-check",
-            "target_view_id": "view-parallel"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1260,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1360,
-                  "y": 130
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-4",
-          "subject": "flow-4",
-          "endpoints": {
-            "source_view_id": "view-parallel",
-            "target_view_id": "view-reserve"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1580,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 80,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-5",
-          "subject": "flow-5",
-          "endpoints": {
-            "source_view_id": "view-parallel",
-            "target_view_id": "view-charge"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1580,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 400,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-6",
-          "subject": "flow-6",
-          "endpoints": {
-            "source_view_id": "view-reserve",
-            "target_view_id": "view-synchronize"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 300,
-              "y": 310
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 720,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-7",
-          "subject": "flow-7",
-          "endpoints": {
-            "source_view_id": "view-charge",
-            "target_view_id": "view-synchronize"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 620,
-              "y": 310
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 720,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-8",
-          "subject": "flow-8",
-          "endpoints": {
-            "source_view_id": "view-synchronize",
-            "target_view_id": "view-ship"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 940,
-              "y": 310
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1040,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-9",
-          "subject": "flow-9",
-          "endpoints": {
-            "source_view_id": "view-check",
-            "target_view_id": "view-reject"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1260,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1360,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-10",
-          "subject": "flow-10",
-          "endpoints": {
-            "source_view_id": "view-ship",
-            "target_view_id": "view-merge"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1260,
-              "y": 310
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 80,
-                  "y": 490
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-11",
-          "subject": "flow-11",
-          "endpoints": {
-            "source_view_id": "view-reject",
-            "target_view_id": "view-merge"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1580,
-              "y": 310
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 80,
-                  "y": 490
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-flow-12",
-          "subject": "flow-12",
-          "endpoints": {
-            "source_view_id": "view-ship",
-            "target_view_id": "view-finish"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 300,
-              "y": 490
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 400,
-                  "y": 490
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-order-data",
-          "subject": "order-data",
-          "endpoints": {
-            "source_view_id": "view-order-output",
-            "target_view_id": "view-order-input"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1260,
-              "y": 490
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1360,
-                  "y": 490
-                }
-              }
-            ]
-          }
-        }
-      ]
-    }
-  ]
+    ]
+  }
 }

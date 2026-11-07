@@ -1,13 +1,11 @@
 --- valid.json
 +++ invalid.json
-@@ -806,7 +806,9 @@
-       "kind": "uml.state",
-       "name": "Open",
-       "properties": {
--        "submachine": null
-+        "submachine": {
-+          "$ref": "lifecycle-recovery"
-+        }
-       }
-     },
-     {
+@@ -2750,7 +2750,7 @@
+             "ownedRule": [],
+             "isLeaf": "false",
+             "container": "lifecycle-region",
+-            "submachine": null,
++            "submachine": "lifecycle-recovery",
+             "connection": [],
+             "connectionPoint": [],
+             "redefinedState": null,

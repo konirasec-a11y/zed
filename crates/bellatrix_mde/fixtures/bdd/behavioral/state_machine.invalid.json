@@ -1,679 +1,836 @@
 {
-  "schema_version": 1,
+  "schemaVersion": 2,
   "id": "state_machine-project",
   "name": "State Machine",
-  "root_model": "root",
-  "elements": [
-    {
-      "id": "root",
-      "kind": "uml.model",
-      "name": "Behavioral acceptance corpus",
-      "properties": {}
+  "model": {
+    "registry": {
+      "entries": {
+        "approve": {
+          "id": "approve",
+          "type": "Transition",
+          "data": {
+            "id": "approve",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Approve",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "kind": "External",
+            "redefinedTransition": null,
+            "guard": null,
+            "effect": null,
+            "trigger": [],
+            "source": "pending",
+            "target": "processing",
+            "container": "main"
+          }
+        },
+        "begin": {
+          "id": "begin",
+          "type": "Transition",
+          "data": {
+            "id": "begin",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Begin",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "kind": "External",
+            "redefinedTransition": null,
+            "guard": null,
+            "effect": null,
+            "trigger": [],
+            "source": "initial",
+            "target": "pending",
+            "container": "main"
+          }
+        },
+        "cancel": {
+          "id": "cancel",
+          "type": "Transition",
+          "data": {
+            "id": "cancel",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Cancel",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "kind": "External",
+            "redefinedTransition": null,
+            "guard": null,
+            "effect": null,
+            "trigger": [],
+            "source": "pending",
+            "target": "cancelled",
+            "container": "main"
+          }
+        },
+        "cancelled": {
+          "id": "cancelled",
+          "type": "State",
+          "data": {
+            "id": "cancelled",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Cancelled",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "container": "main",
+            "submachine": null,
+            "connection": [],
+            "connectionPoint": [],
+            "redefinedState": null,
+            "stateInvariant": null,
+            "entry": null,
+            "exit": null,
+            "doActivity": null,
+            "deferrableTrigger": [],
+            "region": []
+          }
+        },
+        "close-cancelled": {
+          "id": "close-cancelled",
+          "type": "Transition",
+          "data": {
+            "id": "close-cancelled",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Close cancelled",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "kind": "External",
+            "redefinedTransition": null,
+            "guard": null,
+            "effect": null,
+            "trigger": [],
+            "source": "cancelled",
+            "target": "done",
+            "container": "main"
+          }
+        },
+        "complete": {
+          "id": "complete",
+          "type": "Transition",
+          "data": {
+            "id": "complete",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Complete",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "kind": "External",
+            "redefinedTransition": null,
+            "guard": null,
+            "effect": null,
+            "trigger": [],
+            "source": "done",
+            "target": "pending",
+            "container": "main"
+          }
+        },
+        "detail-initial": {
+          "id": "detail-initial",
+          "type": "Pseudostate",
+          "data": {
+            "id": "detail-initial",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Detail initial",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "container": "processing-region",
+            "kind": "Initial",
+            "stateMachine": null,
+            "state": null
+          }
+        },
+        "done": {
+          "id": "done",
+          "type": "FinalState",
+          "data": {
+            "id": "done",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Done",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "container": "main",
+            "submachine": null,
+            "connection": [],
+            "connectionPoint": [],
+            "redefinedState": null,
+            "stateInvariant": null,
+            "entry": null,
+            "exit": null,
+            "doActivity": null,
+            "deferrableTrigger": [],
+            "region": []
+          }
+        },
+        "finish-packing": {
+          "id": "finish-packing",
+          "type": "Transition",
+          "data": {
+            "id": "finish-packing",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Finish packing",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "kind": "External",
+            "redefinedTransition": null,
+            "guard": null,
+            "effect": null,
+            "trigger": [],
+            "source": "packing",
+            "target": "packed",
+            "container": "processing-region"
+          }
+        },
+        "initial": {
+          "id": "initial",
+          "type": "Pseudostate",
+          "data": {
+            "id": "initial",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Initial",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "container": "main",
+            "kind": "Initial",
+            "stateMachine": null,
+            "state": null
+          }
+        },
+        "main": {
+          "id": "main",
+          "type": "Region",
+          "data": {
+            "id": "main",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Lifecycle",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "subvertex": [
+              "initial",
+              "pending",
+              "processing",
+              "cancelled",
+              "done"
+            ],
+            "transition": [
+              "begin",
+              "approve",
+              "cancel",
+              "complete",
+              "close-cancelled"
+            ],
+            "state": null,
+            "extendedRegion": null,
+            "stateMachine": "order-lifecycle"
+          }
+        },
+        "order-lifecycle": {
+          "id": "order-lifecycle",
+          "type": "StateMachine",
+          "data": {
+            "id": "order-lifecycle",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Order lifecycle",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "isReentrant": "true",
+            "redefinedBehavior": [],
+            "ownedParameter": [],
+            "precondition": [],
+            "postcondition": [],
+            "ownedParameterSet": [],
+            "specification": null,
+            "region": [
+              "main"
+            ],
+            "submachineState": [],
+            "connectionPoint": [],
+            "extendedStateMachine": []
+          }
+        },
+        "packed": {
+          "id": "packed",
+          "type": "FinalState",
+          "data": {
+            "id": "packed",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Packed",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "container": "processing-region",
+            "submachine": null,
+            "connection": [],
+            "connectionPoint": [],
+            "redefinedState": null,
+            "stateInvariant": null,
+            "entry": null,
+            "exit": null,
+            "doActivity": null,
+            "deferrableTrigger": [],
+            "region": []
+          }
+        },
+        "packing": {
+          "id": "packing",
+          "type": "State",
+          "data": {
+            "id": "packing",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Packing",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "container": "processing-region",
+            "submachine": null,
+            "connection": [],
+            "connectionPoint": [],
+            "redefinedState": null,
+            "stateInvariant": null,
+            "entry": null,
+            "exit": null,
+            "doActivity": null,
+            "deferrableTrigger": [],
+            "region": []
+          }
+        },
+        "pending": {
+          "id": "pending",
+          "type": "State",
+          "data": {
+            "id": "pending",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Pending",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "container": "main",
+            "submachine": null,
+            "connection": [],
+            "connectionPoint": [],
+            "redefinedState": null,
+            "stateInvariant": null,
+            "entry": null,
+            "exit": null,
+            "doActivity": null,
+            "deferrableTrigger": [],
+            "region": []
+          }
+        },
+        "processing": {
+          "id": "processing",
+          "type": "State",
+          "data": {
+            "id": "processing",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Processing",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "container": "main",
+            "submachine": null,
+            "connection": [],
+            "connectionPoint": [],
+            "redefinedState": null,
+            "stateInvariant": null,
+            "entry": null,
+            "exit": null,
+            "doActivity": null,
+            "deferrableTrigger": [],
+            "region": [
+              "processing-region"
+            ]
+          }
+        },
+        "processing-region": {
+          "id": "processing-region",
+          "type": "Region",
+          "data": {
+            "id": "processing-region",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Processing detail",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "subvertex": [
+              "detail-initial",
+              "packing",
+              "packed"
+            ],
+            "transition": [
+              "start-packing",
+              "finish-packing"
+            ],
+            "state": "processing",
+            "extendedRegion": null,
+            "stateMachine": null
+          }
+        },
+        "root": {
+          "id": "root",
+          "type": "Model",
+          "data": {
+            "id": "root",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Behavioral acceptance corpus",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "order-lifecycle"
+            ],
+            "profileApplication": [],
+            "viewpoint": null
+          }
+        },
+        "start-packing": {
+          "id": "start-packing",
+          "type": "Transition",
+          "data": {
+            "id": "start-packing",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Start packing",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "kind": "External",
+            "redefinedTransition": null,
+            "guard": null,
+            "effect": null,
+            "trigger": [],
+            "source": "detail-initial",
+            "target": "packing",
+            "container": "processing-region"
+          }
+        }
+      }
     },
-    {
-      "id": "order-lifecycle",
-      "kind": "uml.state_machine",
-      "name": "Order lifecycle",
-      "properties": {
-        "region": [
+    "rootModel": "root",
+    "diagrams": [
+      {
+        "id": "state_machine-diagram",
+        "name": "State Machine",
+        "uml_di_type": "UMLStateMachineDiagram",
+        "width": 1800,
+        "height": 1200,
+        "model_elements": [
+          "order-lifecycle"
+        ],
+        "views": [
           {
-            "$ref": "main"
+            "id": "view-order-lifecycle",
+            "subject": "order-lifecycle",
+            "geometry": {
+              "kind": "rect",
+              "x": 80,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-main",
+            "subject": "main",
+            "geometry": {
+              "kind": "rect",
+              "x": 400,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-initial",
+            "subject": "initial",
+            "geometry": {
+              "kind": "rect",
+              "x": 720,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-pending",
+            "subject": "pending",
+            "geometry": {
+              "kind": "rect",
+              "x": 1040,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-processing",
+            "subject": "processing",
+            "geometry": {
+              "kind": "rect",
+              "x": 1360,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-cancelled",
+            "subject": "cancelled",
+            "geometry": {
+              "kind": "rect",
+              "x": 80,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-done",
+            "subject": "done",
+            "geometry": {
+              "kind": "rect",
+              "x": 400,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-processing-region",
+            "subject": "processing-region",
+            "geometry": {
+              "kind": "rect",
+              "x": 720,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-detail-initial",
+            "subject": "detail-initial",
+            "geometry": {
+              "kind": "rect",
+              "x": 1040,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-packing",
+            "subject": "packing",
+            "geometry": {
+              "kind": "rect",
+              "x": 1360,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-packed",
+            "subject": "packed",
+            "geometry": {
+              "kind": "rect",
+              "x": 80,
+              "y": 440,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-begin",
+            "subject": "begin",
+            "endpoints": {
+              "source_view_id": "view-initial",
+              "target_view_id": "view-pending"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 940,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1040,
+                    "y": 130
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-approve",
+            "subject": "approve",
+            "endpoints": {
+              "source_view_id": "view-pending",
+              "target_view_id": "view-processing"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1260,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1360,
+                    "y": 130
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-cancel",
+            "subject": "cancel",
+            "endpoints": {
+              "source_view_id": "view-pending",
+              "target_view_id": "view-cancelled"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1260,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 80,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-complete",
+            "subject": "complete",
+            "endpoints": {
+              "source_view_id": "view-done",
+              "target_view_id": "view-pending"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1580,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 400,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-close-cancelled",
+            "subject": "close-cancelled",
+            "endpoints": {
+              "source_view_id": "view-cancelled",
+              "target_view_id": "view-done"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 300,
+                "y": 310
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 400,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-start-packing",
+            "subject": "start-packing",
+            "endpoints": {
+              "source_view_id": "view-detail-initial",
+              "target_view_id": "view-packing"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1260,
+                "y": 310
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1360,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-finish-packing",
+            "subject": "finish-packing",
+            "endpoints": {
+              "source_view_id": "view-packing",
+              "target_view_id": "view-packed"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1580,
+                "y": 310
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 80,
+                    "y": 490
+                  }
+                }
+              ]
+            }
           }
         ]
       }
-    },
-    {
-      "id": "main",
-      "kind": "uml.region",
-      "name": "Lifecycle",
-      "properties": {
-        "stateMachine": {
-          "$ref": "order-lifecycle"
-        }
-      }
-    },
-    {
-      "id": "initial",
-      "kind": "uml.pseudostate",
-      "name": "Initial",
-      "properties": {
-        "kind": "initial",
-        "container": {
-          "$ref": "main"
-        }
-      }
-    },
-    {
-      "id": "pending",
-      "kind": "uml.state",
-      "name": "Pending",
-      "properties": {
-        "container": {
-          "$ref": "main"
-        }
-      }
-    },
-    {
-      "id": "processing",
-      "kind": "uml.state",
-      "name": "Processing",
-      "properties": {
-        "container": {
-          "$ref": "main"
-        },
-        "region": [
-          {
-            "$ref": "processing-region"
-          }
-        ]
-      }
-    },
-    {
-      "id": "cancelled",
-      "kind": "uml.state",
-      "name": "Cancelled",
-      "properties": {
-        "container": {
-          "$ref": "main"
-        }
-      }
-    },
-    {
-      "id": "done",
-      "kind": "uml.final_state",
-      "name": "Done",
-      "properties": {
-        "container": {
-          "$ref": "main"
-        }
-      }
-    },
-    {
-      "id": "processing-region",
-      "kind": "uml.region",
-      "name": "Processing detail",
-      "properties": {
-        "state": {
-          "$ref": "processing"
-        }
-      }
-    },
-    {
-      "id": "detail-initial",
-      "kind": "uml.pseudostate",
-      "name": "Detail initial",
-      "properties": {
-        "kind": "initial",
-        "container": {
-          "$ref": "processing-region"
-        }
-      }
-    },
-    {
-      "id": "packing",
-      "kind": "uml.state",
-      "name": "Packing",
-      "properties": {
-        "container": {
-          "$ref": "processing-region"
-        }
-      }
-    },
-    {
-      "id": "packed",
-      "kind": "uml.final_state",
-      "name": "Packed",
-      "properties": {
-        "container": {
-          "$ref": "processing-region"
-        }
-      }
-    }
-  ],
-  "relations": [
-    {
-      "id": "owns-order-lifecycle",
-      "kind": "owns",
-      "from": "root",
-      "to": "order-lifecycle"
-    },
-    {
-      "id": "owns-main",
-      "kind": "owns",
-      "from": "order-lifecycle",
-      "to": "main"
-    },
-    {
-      "id": "owns-initial",
-      "kind": "owns",
-      "from": "main",
-      "to": "initial"
-    },
-    {
-      "id": "owns-pending",
-      "kind": "owns",
-      "from": "main",
-      "to": "pending"
-    },
-    {
-      "id": "owns-processing",
-      "kind": "owns",
-      "from": "main",
-      "to": "processing"
-    },
-    {
-      "id": "owns-cancelled",
-      "kind": "owns",
-      "from": "main",
-      "to": "cancelled"
-    },
-    {
-      "id": "owns-done",
-      "kind": "owns",
-      "from": "main",
-      "to": "done"
-    },
-    {
-      "id": "owns-processing-region",
-      "kind": "owns",
-      "from": "processing",
-      "to": "processing-region"
-    },
-    {
-      "id": "owns-detail-initial",
-      "kind": "owns",
-      "from": "processing-region",
-      "to": "detail-initial"
-    },
-    {
-      "id": "owns-packing",
-      "kind": "owns",
-      "from": "processing-region",
-      "to": "packing"
-    },
-    {
-      "id": "owns-packed",
-      "kind": "owns",
-      "from": "processing-region",
-      "to": "packed"
-    },
-    {
-      "id": "begin",
-      "kind": "uml.transition",
-      "from": "initial",
-      "to": "pending",
-      "properties": {
-        "source": {
-          "$ref": "initial"
-        },
-        "target": {
-          "$ref": "pending"
-        },
-        "container": {
-          "$ref": "main"
-        },
-        "kind": "external",
-        "name": "Begin"
-      }
-    },
-    {
-      "id": "owns-begin",
-      "kind": "owns",
-      "from": "main",
-      "to": "begin"
-    },
-    {
-      "id": "approve",
-      "kind": "uml.transition",
-      "from": "pending",
-      "to": "processing",
-      "properties": {
-        "source": {
-          "$ref": "pending"
-        },
-        "target": {
-          "$ref": "processing"
-        },
-        "container": {
-          "$ref": "main"
-        },
-        "kind": "external",
-        "name": "Approve"
-      }
-    },
-    {
-      "id": "owns-approve",
-      "kind": "owns",
-      "from": "main",
-      "to": "approve"
-    },
-    {
-      "id": "cancel",
-      "kind": "uml.transition",
-      "from": "pending",
-      "to": "cancelled",
-      "properties": {
-        "source": {
-          "$ref": "pending"
-        },
-        "target": {
-          "$ref": "cancelled"
-        },
-        "container": {
-          "$ref": "main"
-        },
-        "kind": "external",
-        "name": "Cancel"
-      }
-    },
-    {
-      "id": "owns-cancel",
-      "kind": "owns",
-      "from": "main",
-      "to": "cancel"
-    },
-    {
-      "id": "complete",
-      "kind": "uml.transition",
-      "from": "done",
-      "to": "pending",
-      "properties": {
-        "source": {
-          "$ref": "done"
-        },
-        "target": {
-          "$ref": "pending"
-        },
-        "container": {
-          "$ref": "main"
-        },
-        "kind": "external",
-        "name": "Complete"
-      }
-    },
-    {
-      "id": "owns-complete",
-      "kind": "owns",
-      "from": "main",
-      "to": "complete"
-    },
-    {
-      "id": "close-cancelled",
-      "kind": "uml.transition",
-      "from": "cancelled",
-      "to": "done",
-      "properties": {
-        "source": {
-          "$ref": "cancelled"
-        },
-        "target": {
-          "$ref": "done"
-        },
-        "container": {
-          "$ref": "main"
-        },
-        "kind": "external",
-        "name": "Close cancelled"
-      }
-    },
-    {
-      "id": "owns-close-cancelled",
-      "kind": "owns",
-      "from": "main",
-      "to": "close-cancelled"
-    },
-    {
-      "id": "start-packing",
-      "kind": "uml.transition",
-      "from": "detail-initial",
-      "to": "packing",
-      "properties": {
-        "source": {
-          "$ref": "detail-initial"
-        },
-        "target": {
-          "$ref": "packing"
-        },
-        "container": {
-          "$ref": "processing-region"
-        },
-        "kind": "external",
-        "name": "Start packing"
-      }
-    },
-    {
-      "id": "owns-start-packing",
-      "kind": "owns",
-      "from": "processing-region",
-      "to": "start-packing"
-    },
-    {
-      "id": "finish-packing",
-      "kind": "uml.transition",
-      "from": "packing",
-      "to": "packed",
-      "properties": {
-        "source": {
-          "$ref": "packing"
-        },
-        "target": {
-          "$ref": "packed"
-        },
-        "container": {
-          "$ref": "processing-region"
-        },
-        "kind": "external",
-        "name": "Finish packing"
-      }
-    },
-    {
-      "id": "owns-finish-packing",
-      "kind": "owns",
-      "from": "processing-region",
-      "to": "finish-packing"
-    }
-  ],
-  "diagrams": [
-    {
-      "id": "state_machine-diagram",
-      "name": "State Machine",
-      "uml_di_type": "UMLStateMachineDiagram",
-      "width": 1800,
-      "height": 1200,
-      "model_elements": [
-        "order-lifecycle"
-      ],
-      "views": [
-        {
-          "id": "view-order-lifecycle",
-          "subject": "order-lifecycle",
-          "geometry": {
-            "kind": "rect",
-            "x": 80,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-main",
-          "subject": "main",
-          "geometry": {
-            "kind": "rect",
-            "x": 400,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-initial",
-          "subject": "initial",
-          "geometry": {
-            "kind": "rect",
-            "x": 720,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-pending",
-          "subject": "pending",
-          "geometry": {
-            "kind": "rect",
-            "x": 1040,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-processing",
-          "subject": "processing",
-          "geometry": {
-            "kind": "rect",
-            "x": 1360,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-cancelled",
-          "subject": "cancelled",
-          "geometry": {
-            "kind": "rect",
-            "x": 80,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-done",
-          "subject": "done",
-          "geometry": {
-            "kind": "rect",
-            "x": 400,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-processing-region",
-          "subject": "processing-region",
-          "geometry": {
-            "kind": "rect",
-            "x": 720,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-detail-initial",
-          "subject": "detail-initial",
-          "geometry": {
-            "kind": "rect",
-            "x": 1040,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-packing",
-          "subject": "packing",
-          "geometry": {
-            "kind": "rect",
-            "x": 1360,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-packed",
-          "subject": "packed",
-          "geometry": {
-            "kind": "rect",
-            "x": 80,
-            "y": 440,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-begin",
-          "subject": "begin",
-          "endpoints": {
-            "source_view_id": "view-initial",
-            "target_view_id": "view-pending"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 940,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1040,
-                  "y": 130
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-approve",
-          "subject": "approve",
-          "endpoints": {
-            "source_view_id": "view-pending",
-            "target_view_id": "view-processing"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1260,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1360,
-                  "y": 130
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-cancel",
-          "subject": "cancel",
-          "endpoints": {
-            "source_view_id": "view-pending",
-            "target_view_id": "view-cancelled"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1260,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 80,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-complete",
-          "subject": "complete",
-          "endpoints": {
-            "source_view_id": "view-done",
-            "target_view_id": "view-pending"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1580,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 400,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-close-cancelled",
-          "subject": "close-cancelled",
-          "endpoints": {
-            "source_view_id": "view-cancelled",
-            "target_view_id": "view-done"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 300,
-              "y": 310
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 400,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-start-packing",
-          "subject": "start-packing",
-          "endpoints": {
-            "source_view_id": "view-detail-initial",
-            "target_view_id": "view-packing"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1260,
-              "y": 310
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1360,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-finish-packing",
-          "subject": "finish-packing",
-          "endpoints": {
-            "source_view_id": "view-packing",
-            "target_view_id": "view-packed"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1580,
-              "y": 310
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 80,
-                  "y": 490
-                }
-              }
-            ]
-          }
-        }
-      ]
-    }
-  ]
+    ]
+  }
 }

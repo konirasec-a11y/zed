@@ -1,3 +1,47 @@
+# Structural authored project corpus
+
+## Canonical persistence acceptance
+
+The document files are explicit schema-2 projects: `schemaVersion`, project identity,
+and `model.registry.entries`. The registry contains typed ruml contracts; it is the
+only persisted UML state. No schema-1 loader, projection-to-storage adapter or
+legacy compatibility fixture is part of the executable BDD.
+
+`tests/bdd_diagram_flows.rs` imports each document through the public document API,
+prepares its canonical section, saves to JSON and BLX2, closes and reopens both
+files, and compares the complete typed project and canonical API envelope. It
+also persists the prepared section through the public section API. The manifests
+supply explicit authored witnesses checked before and after persistence. Every
+Gherkin example must have exactly one manifest entry. Of the 40 preserved
+requirements, 32 have executable canonical documents and eight are explicitly
+pending because their original intent is not representable by the current
+contract. Pending cases have no substitute JSON fixture.
+
+Names ending in `valid` or `invalid` are historical scenario identifiers, not a
+claim of UML certification. `historical_diagnostics` and
+`historical_forbidden_diagnostics` preserve the original requirement context but
+are not evaluated by these persistence flows. Semantically questionable contracts
+must remain inspectable and survive persistence; no removed validator is revived.
+
+Multiplicities are authored as `lowerValue`/`upperValue` references to
+LiteralInteger/LiteralUnlimitedNatural contracts. Ownership is encoded in UML
+composite fields, not persisted `owns` edge records. Required scalar fields use
+the current contract's enum spelling and string representation. Diagram geometry,
+styles, view endpoints and identities remain part of the equality assertion.
+
+The 14 examples cover class, object, package, component, composite structure,
+deployment and profile pairs. Each project retains one diagram and its full domain
+model. Negative witnesses retain the selected direction, classifier, visibility,
+nested classifier, connector role, deployment metaclass or generalization change.
+Association display roles and multiplicities are represented by the actual
+Property end contracts, rather than duplicate projection properties.
+
+## Historical semantic requirements
+
+The following original notes preserve the intended domain scenarios and normative
+references. Mentions of old validation executables, legacy paths or additional
+lifecycles describe historical requirements, not coverage of the current runner.
+
 # Isolated structural UML corpus
 
 Each pair is a native Bellatrix Project JSON with its own root, graph, one UMLDI diagram and no external references. Load each file separately. `cases.json` specifies the targeted invalid rule and diagnostic identity. The invalid variant is a semantic mutation of the valid baseline, not a parsing failure.

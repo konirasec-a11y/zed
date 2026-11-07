@@ -6,8 +6,95 @@
       "diagram_kind": "use_case",
       "diagram_id": "use_case-diagram",
       "expected": "valid",
-      "diagnostics": [],
-      "intent": "Baseline sem viola\u00e7\u00e3o conhecida das regras implementadas."
+      "intent": "Baseline sem violação conhecida das regras implementadas.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/checkout/type",
+          "value": "UseCase"
+        },
+        {
+          "pointer": "/model/registry/entries/checkout-payment/type",
+          "value": "Include"
+        },
+        {
+          "pointer": "/model/registry/entries/checkout-receipt/type",
+          "value": "Include"
+        },
+        {
+          "pointer": "/model/registry/entries/customer/type",
+          "value": "Actor"
+        },
+        {
+          "pointer": "/model/registry/entries/customer-checkout/type",
+          "value": "Association"
+        },
+        {
+          "pointer": "/model/registry/entries/customer-checkout-actor/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/customer-checkout-case/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/discount/type",
+          "value": "UseCase"
+        },
+        {
+          "pointer": "/model/registry/entries/discount-extension/type",
+          "value": "Extend"
+        },
+        {
+          "pointer": "/model/registry/entries/gateway/type",
+          "value": "Actor"
+        },
+        {
+          "pointer": "/model/registry/entries/gateway-payment/type",
+          "value": "Association"
+        },
+        {
+          "pointer": "/model/registry/entries/gateway-payment-actor/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/gateway-payment-case/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/loyalty-point/type",
+          "value": "ExtensionPoint"
+        },
+        {
+          "pointer": "/model/registry/entries/member/type",
+          "value": "Actor"
+        },
+        {
+          "pointer": "/model/registry/entries/member-generalization/type",
+          "value": "Generalization"
+        },
+        {
+          "pointer": "/model/registry/entries/payment/type",
+          "value": "UseCase"
+        },
+        {
+          "pointer": "/model/registry/entries/receipt/type",
+          "value": "UseCase"
+        },
+        {
+          "pointer": "/model/registry/entries/shop/type",
+          "value": "Class"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "use_case-invalid",
@@ -15,14 +102,29 @@
       "diagram_kind": "use_case",
       "diagram_id": "use_case-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "intent": "Extend.extensionLocation esvaziado: viola multiplicidade 1..*.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/discount-extension/data/extensionLocation",
+          "value": []
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_PROPERTY_CONTRACT",
           "severity": "error",
           "subject_id": "discount-extension"
         }
       ],
-      "intent": "Extend.extensionLocation esvaziado: viola multiplicidade 1..*."
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-valid",
@@ -30,8 +132,251 @@
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "valid",
-      "diagnostics": [],
-      "intent": "Baseline sem viola\u00e7\u00e3o conhecida das regras implementadas."
+      "intent": "Baseline sem violação conhecida das regras implementadas.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/charge/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/check/type",
+          "value": "DecisionNode"
+        },
+        {
+          "pointer": "/model/registry/entries/finish/type",
+          "value": "ActivityFinalNode"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-10/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-10-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-10-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-11/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-11-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-11-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-12/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-12-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-12-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-2/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-2-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-2-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-3/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-3-guard/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-3-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-4/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-4-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-4-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-5/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-5-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-5-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-6/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-6-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-6-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-7/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-7-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-7-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-8/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-8-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-8-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-9/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-9-guard/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-9-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/fulfillment/type",
+          "value": "Activity"
+        },
+        {
+          "pointer": "/model/registry/entries/merge/type",
+          "value": "MergeNode"
+        },
+        {
+          "pointer": "/model/registry/entries/order/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/order-data/type",
+          "value": "ObjectFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/order-data-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/order-data-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/order-input/type",
+          "value": "InputPin"
+        },
+        {
+          "pointer": "/model/registry/entries/order-input-upperBound-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/order-output/type",
+          "value": "OutputPin"
+        },
+        {
+          "pointer": "/model/registry/entries/order-output-upperBound-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/parallel/type",
+          "value": "ForkNode"
+        },
+        {
+          "pointer": "/model/registry/entries/receive/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/reject/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/reserve/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/ship/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/start/type",
+          "value": "InitialNode"
+        },
+        {
+          "pointer": "/model/registry/entries/synchronize/type",
+          "value": "JoinNode"
+        },
+        {
+          "pointer": "/model/registry/entries/synchronize-joinSpec-value/type",
+          "value": "OpaqueExpression"
+        },
+        {
+          "pointer": "/model/registry/entries/warehouse/type",
+          "value": "ActivityPartition"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-invalid",
@@ -39,14 +384,29 @@
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "intent": "ControlFlow.target referencia Class Order, não ActivityNode; a projeção visual e os IDs permanecem íntegros.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1/data/target",
+          "value": "order"
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_PROPERTY_CONTRACT",
           "severity": "error",
           "subject_id": "flow-1"
         }
       ],
-      "intent": "ControlFlow.target referencia Class Order, n\u00e3o ActivityNode; a proje\u00e7\u00e3o visual e os IDs permanecem \u00edntegros."
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "state_machine-valid",
@@ -54,8 +414,91 @@
       "diagram_kind": "state_machine",
       "diagram_id": "state_machine-diagram",
       "expected": "valid",
-      "diagnostics": [],
-      "intent": "Baseline sem viola\u00e7\u00e3o conhecida das regras implementadas."
+      "intent": "Baseline sem violação conhecida das regras implementadas.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/approve/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/begin/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/cancel/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/cancelled/type",
+          "value": "State"
+        },
+        {
+          "pointer": "/model/registry/entries/close-cancelled/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/complete/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/detail-initial/type",
+          "value": "Pseudostate"
+        },
+        {
+          "pointer": "/model/registry/entries/done/type",
+          "value": "FinalState"
+        },
+        {
+          "pointer": "/model/registry/entries/finish-packing/type",
+          "value": "Transition"
+        },
+        {
+          "pointer": "/model/registry/entries/initial/type",
+          "value": "Pseudostate"
+        },
+        {
+          "pointer": "/model/registry/entries/main/type",
+          "value": "Region"
+        },
+        {
+          "pointer": "/model/registry/entries/order-lifecycle/type",
+          "value": "StateMachine"
+        },
+        {
+          "pointer": "/model/registry/entries/packed/type",
+          "value": "FinalState"
+        },
+        {
+          "pointer": "/model/registry/entries/packing/type",
+          "value": "State"
+        },
+        {
+          "pointer": "/model/registry/entries/pending/type",
+          "value": "State"
+        },
+        {
+          "pointer": "/model/registry/entries/processing/type",
+          "value": "State"
+        },
+        {
+          "pointer": "/model/registry/entries/processing-region/type",
+          "value": "Region"
+        },
+        {
+          "pointer": "/model/registry/entries/start-packing/type",
+          "value": "Transition"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "state_machine-invalid",
@@ -63,14 +506,33 @@
       "diagram_kind": "state_machine",
       "diagram_id": "state_machine-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "intent": "Transição complete parte de FinalState done; source/target e attachments permanecem coerentes.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/complete/data/source",
+          "value": "done"
+        },
+        {
+          "pointer": "/model/registry/entries/complete/data/target",
+          "value": "pending"
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_FINAL_STATE_NO_OUTGOING_TRANSITIONS",
           "severity": "error",
           "subject_id": "done"
         }
       ],
-      "intent": "Transi\u00e7\u00e3o complete parte de FinalState done; source/target e attachments permanecem coerentes."
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-initial-incoming-invalid",
@@ -78,13 +540,28 @@
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1/data/target",
+          "value": "start"
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_INITIAL_NODE_NO_INCOMING_EDGES",
           "subject_id": "start",
           "severity": "error"
         }
-      ]
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-initial-control-invalid",
@@ -92,7 +569,37 @@
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1/type",
+          "value": "ObjectFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1/data/isMulticast",
+          "value": "false"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1/data/isMultireceive",
+          "value": "false"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1/data/transformation",
+          "value": null
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1/data/selection",
+          "value": null
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_INITIAL_NODE_CONTROL_EDGES",
           "subject_id": "start",
@@ -103,7 +610,8 @@
           "subject_id": "flow-1",
           "severity": "error"
         }
-      ]
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-final-outgoing-invalid",
@@ -111,13 +619,28 @@
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-10/data/source",
+          "value": "finish"
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_FINAL_NODE_NO_OUTGOING_EDGES",
           "subject_id": "finish",
           "severity": "error"
         }
-      ]
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-fork-incoming-invalid",
@@ -125,13 +648,28 @@
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-3/data/target",
+          "value": "receive"
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_FORK_NODE_ONE_INCOMING_EDGE",
           "subject_id": "parallel",
           "severity": "error"
         }
-      ]
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-join-outgoing-invalid",
@@ -139,13 +677,28 @@
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-8/data/source",
+          "value": "ship"
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_JOIN_NODE_ONE_OUTGOING_EDGE",
           "subject_id": "synchronize",
           "severity": "error"
         }
-      ]
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-merge-outgoing-invalid",
@@ -153,13 +706,28 @@
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-12/data/source",
+          "value": "ship"
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_MERGE_NODE_ONE_OUTGOING_EDGE",
           "subject_id": "merge",
           "severity": "error"
         }
-      ]
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-decision-incoming-invalid",
@@ -167,13 +735,28 @@
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-2/data/target",
+          "value": "receive"
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_DECISION_NODE_INCOMING_OUTGOING_EDGES",
           "subject_id": "check",
           "severity": "error"
         }
-      ]
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-presentation-roundtrip-valid",
@@ -181,15 +764,257 @@
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "valid",
-      "diagnostics": []
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/charge/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/check/type",
+          "value": "DecisionNode"
+        },
+        {
+          "pointer": "/model/registry/entries/finish/type",
+          "value": "ActivityFinalNode"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-1-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-10/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-10-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-10-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-11/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-11-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-11-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-12/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-12-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-12-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-2/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-2-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-2-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-3/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-3-guard/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-3-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-4/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-4-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-4-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-5/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-5-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-5-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-6/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-6-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-6-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-7/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-7-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-7-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-8/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-8-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-8-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-9/type",
+          "value": "ControlFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-9-guard/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/flow-9-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/fulfillment/type",
+          "value": "Activity"
+        },
+        {
+          "pointer": "/model/registry/entries/merge/type",
+          "value": "MergeNode"
+        },
+        {
+          "pointer": "/model/registry/entries/order/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/order-data/type",
+          "value": "ObjectFlow"
+        },
+        {
+          "pointer": "/model/registry/entries/order-data-guard-value/type",
+          "value": "LiteralBoolean"
+        },
+        {
+          "pointer": "/model/registry/entries/order-data-weight-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/order-input/type",
+          "value": "InputPin"
+        },
+        {
+          "pointer": "/model/registry/entries/order-input-upperBound-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/order-output/type",
+          "value": "OutputPin"
+        },
+        {
+          "pointer": "/model/registry/entries/order-output-upperBound-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/parallel/type",
+          "value": "ForkNode"
+        },
+        {
+          "pointer": "/model/registry/entries/receive/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/reject/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/reserve/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/ship/type",
+          "value": "OpaqueAction"
+        },
+        {
+          "pointer": "/model/registry/entries/start/type",
+          "value": "InitialNode"
+        },
+        {
+          "pointer": "/model/registry/entries/synchronize/type",
+          "value": "JoinNode"
+        },
+        {
+          "pointer": "/model/registry/entries/synchronize-joinSpec-value/type",
+          "value": "OpaqueExpression"
+        },
+        {
+          "pointer": "/model/registry/entries/warehouse/type",
+          "value": "ActivityPartition"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "activity-malformed-incidence-invalid",
-      "file": "activity.malformed-incidence.invalid.json",
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "historical_diagnostics": [
         {
           "code": "UML_PROPERTY_CONTRACT",
           "subject_id": "uncertain-edge",
@@ -205,22 +1030,25 @@
           "subject_id": "uncertain-edge",
           "severity": "error"
         }
-      ]
+      ],
+      "acceptance": "Pending contract representation. The unchanged Gherkin requirement is retained, but this example must not report successful persistence until its original intent is representable.",
+      "pending_reason": "Pending: authored source is JSON number 42, but ruml ActivityEdge.source requires String; a string identity is not the same malformed-incidence requirement."
     },
     {
       "id": "activity-external-control-valid",
-      "file": "activity.external-control.valid.json",
       "diagram_kind": "activity",
       "diagram_id": "activity-diagram",
       "expected": "valid",
-      "diagnostics": [],
-      "forbidden_diagnostics": [
+      "historical_diagnostics": [],
+      "historical_forbidden_diagnostics": [
         {
           "code": "MDE_INITIAL_NODE_CONTROL_EDGES_UNVERIFIED",
           "subject_id": "start",
           "severity": "warning"
         }
-      ]
+      ],
+      "acceptance": "Pending contract representation. The unchanged Gherkin requirement is retained, but this example must not report successful persistence until its original intent is representable.",
+      "pending_reason": "Pending: authored source is an external href object, but ruml ActivityEdge.source requires String; external-reference equivalence has not been established."
     }
   ]
 }

@@ -7,7 +7,6 @@
       "diagram_kind": "class",
       "diagram_id": "diagram",
       "expected": "valid",
-      "diagnostics": [],
       "coverage": [
         "Package",
         "abstract Class",
@@ -22,7 +21,263 @@
         "Comment"
       ],
       "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/amount/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/amount-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/amount-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/audit/type",
+          "value": "Comment"
+        },
+        {
+          "pointer": "/model/registry/entries/currency/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/currency-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/currency-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/customer/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/customer-name/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/customer-name-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/customer-name-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/domain/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/entity/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/find/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/find-key/type",
+          "value": "Parameter"
+        },
+        {
+          "pointer": "/model/registry/entries/find-result/type",
+          "value": "Parameter"
+        },
+        {
+          "pointer": "/model/registry/entries/find-result-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/find-result-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/general-customer/type",
+          "value": "Generalization"
+        },
+        {
+          "pointer": "/model/registry/entries/general-order/type",
+          "value": "Generalization"
+        },
+        {
+          "pointer": "/model/registry/entries/general-product/type",
+          "value": "Generalization"
+        },
+        {
+          "pointer": "/model/registry/entries/ident/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/ident-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/ident-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/integer/type",
+          "value": "PrimitiveType"
+        },
+        {
+          "pointer": "/model/registry/entries/line/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/money/type",
+          "value": "DataType"
+        },
+        {
+          "pointer": "/model/registry/entries/order/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/order-lines/type",
+          "value": "Association"
+        },
+        {
+          "pointer": "/model/registry/entries/order-status/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/order-status-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/order-status-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/paid/type",
+          "value": "EnumerationLiteral"
+        },
+        {
+          "pointer": "/model/registry/entries/parts/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/parts-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/parts-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/pending/type",
+          "value": "EnumerationLiteral"
+        },
+        {
+          "pointer": "/model/registry/entries/price/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/price-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/price-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/product/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/quantity/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/quantity-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/quantity-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/repository/type",
+          "value": "Interface"
+        },
+        {
+          "pointer": "/model/registry/entries/shipped/type",
+          "value": "EnumerationLiteral"
+        },
+        {
+          "pointer": "/model/registry/entries/sku/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/sku-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/sku-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/status/type",
+          "value": "Enumeration"
+        },
+        {
+          "pointer": "/model/registry/entries/string/type",
+          "value": "PrimitiveType"
+        },
+        {
+          "pointer": "/model/registry/entries/submit/type",
+          "value": "Operation"
+        },
+        {
+          "pointer": "/model/registry/entries/submit-request/type",
+          "value": "Parameter"
+        },
+        {
+          "pointer": "/model/registry/entries/submit-request-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/submit-request-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/submit-result/type",
+          "value": "Parameter"
+        },
+        {
+          "pointer": "/model/registry/entries/submit-result-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/submit-result-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/whole/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/whole-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/whole-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "class-invalid",
@@ -30,18 +285,6 @@
       "diagram_kind": "class",
       "diagram_id": "diagram",
       "expected": "invalid",
-      "diagnostics": [
-        {
-          "code": "UML_OPERATION_AT_MOST_ONE_RETURN",
-          "subject_id": "submit",
-          "severity": "error"
-        },
-        {
-          "code": "UML_OPERATION_PARAMETERS",
-          "subject_id": "submit",
-          "severity": "error"
-        }
-      ],
       "coverage": [
         "Package",
         "abstract Class",
@@ -56,7 +299,34 @@
         "Comment"
       ],
       "rule": "Operation-at_most_one_return: two return parameters on submit also make the return-parameter projection invalid",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/submit-request/data/direction",
+          "value": "Return"
+        }
+      ],
+      "historical_diagnostics": [
+        {
+          "code": "UML_OPERATION_AT_MOST_ONE_RETURN",
+          "subject_id": "submit",
+          "severity": "error"
+        },
+        {
+          "code": "UML_OPERATION_PARAMETERS",
+          "subject_id": "submit",
+          "severity": "error"
+        }
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "object-valid",
@@ -64,7 +334,6 @@
       "diagram_kind": "object",
       "diagram_id": "diagram",
       "expected": "valid",
-      "diagnostics": [],
       "coverage": [
         "InstanceSpecification",
         "classifier identity",
@@ -73,7 +342,127 @@
         "LiteralInteger"
       ],
       "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/alice/type",
+          "value": "InstanceSpecification"
+        },
+        {
+          "pointer": "/model/registry/entries/alice-name/type",
+          "value": "Slot"
+        },
+        {
+          "pointer": "/model/registry/entries/alice-name-value/type",
+          "value": "LiteralString"
+        },
+        {
+          "pointer": "/model/registry/entries/customer/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/first-number/type",
+          "value": "Slot"
+        },
+        {
+          "pointer": "/model/registry/entries/first-number-value/type",
+          "value": "LiteralString"
+        },
+        {
+          "pointer": "/model/registry/entries/first-total/type",
+          "value": "Slot"
+        },
+        {
+          "pointer": "/model/registry/entries/first-total-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/integer/type",
+          "value": "PrimitiveType"
+        },
+        {
+          "pointer": "/model/registry/entries/name/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/name-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/name-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/number/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/number-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/number-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/order/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/order-1042/type",
+          "value": "InstanceSpecification"
+        },
+        {
+          "pointer": "/model/registry/entries/order-1043/type",
+          "value": "InstanceSpecification"
+        },
+        {
+          "pointer": "/model/registry/entries/other/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/second-number/type",
+          "value": "Slot"
+        },
+        {
+          "pointer": "/model/registry/entries/second-number-value/type",
+          "value": "LiteralString"
+        },
+        {
+          "pointer": "/model/registry/entries/second-total/type",
+          "value": "Slot"
+        },
+        {
+          "pointer": "/model/registry/entries/second-total-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/string/type",
+          "value": "PrimitiveType"
+        },
+        {
+          "pointer": "/model/registry/entries/total/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/total-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/total-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "object-invalid",
@@ -81,7 +470,32 @@
       "diagram_kind": "object",
       "diagram_id": "diagram",
       "expected": "invalid",
-      "diagnostics": [
+      "coverage": [
+        "InstanceSpecification",
+        "classifier identity",
+        "Slot/definingFeature",
+        "LiteralString",
+        "LiteralInteger"
+      ],
+      "rule": "InstanceSpecification-defining_feature: both existing slots refer to features absent from the new classifier, invalidating their assignments",
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/order-1042/data/classifier",
+          "value": [
+            "other"
+          ]
+        }
+      ],
+      "historical_diagnostics": [
         {
           "code": "UML_INSTANCE_DEFINING_FEATURE",
           "subject_id": "order-1042",
@@ -98,15 +512,7 @@
           "severity": "error"
         }
       ],
-      "coverage": [
-        "InstanceSpecification",
-        "classifier identity",
-        "Slot/definingFeature",
-        "LiteralString",
-        "LiteralInteger"
-      ],
-      "rule": "InstanceSpecification-defining_feature: both existing slots refer to features absent from the new classifier, invalidating their assignments",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "package-valid",
@@ -114,7 +520,6 @@
       "diagram_kind": "package",
       "diagram_id": "diagram",
       "expected": "valid",
-      "diagnostics": [],
       "coverage": [
         "nested Package",
         "public/private packaged elements",
@@ -122,7 +527,79 @@
         "ElementImport/alias"
       ],
       "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/adapter/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/application/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/application-contracts/type",
+          "value": "PackageImport"
+        },
+        {
+          "pointer": "/model/registry/entries/contracts/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/domain/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/domain-shared/type",
+          "value": "PackageImport"
+        },
+        {
+          "pointer": "/model/registry/entries/handler/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/identifier/type",
+          "value": "DataType"
+        },
+        {
+          "pointer": "/model/registry/entries/identifier-import/type",
+          "value": "ElementImport"
+        },
+        {
+          "pointer": "/model/registry/entries/infrastructure/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/infrastructure-contracts/type",
+          "value": "PackageImport"
+        },
+        {
+          "pointer": "/model/registry/entries/order/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/port/type",
+          "value": "Interface"
+        },
+        {
+          "pointer": "/model/registry/entries/sales/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/shared/type",
+          "value": "Package"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "package-invalid",
@@ -130,13 +607,6 @@
       "diagram_kind": "package",
       "diagram_id": "diagram",
       "expected": "invalid",
-      "diagnostics": [
-        {
-          "code": "UML_PACKAGE_MEMBER_VISIBILITY",
-          "subject_id": "order",
-          "severity": "error"
-        }
-      ],
       "coverage": [
         "nested Package",
         "public/private packaged elements",
@@ -144,7 +614,29 @@
         "ElementImport/alias"
       ],
       "rule": "Package-elements_public_or_private: packaged Class cannot have protected visibility",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/order/data/visibility",
+          "value": "Protected"
+        }
+      ],
+      "historical_diagnostics": [
+        {
+          "code": "UML_PACKAGE_MEMBER_VISIBILITY",
+          "subject_id": "order",
+          "severity": "error"
+        }
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "component-valid",
@@ -152,7 +644,6 @@
       "diagram_kind": "component",
       "diagram_id": "diagram",
       "expected": "valid",
-      "diagnostics": [],
       "coverage": [
         "Component",
         "packaged implementation Class",
@@ -161,7 +652,99 @@
         "InterfaceRealization"
       ],
       "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/checkout/type",
+          "value": "Component"
+        },
+        {
+          "pointer": "/model/registry/entries/checkout-payments/type",
+          "value": "Port"
+        },
+        {
+          "pointer": "/model/registry/entries/checkout-payments-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/checkout-payments-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/contracts/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/implementation/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/inventory/type",
+          "value": "Component"
+        },
+        {
+          "pointer": "/model/registry/entries/inventory-api/type",
+          "value": "Interface"
+        },
+        {
+          "pointer": "/model/registry/entries/inventory-port/type",
+          "value": "Port"
+        },
+        {
+          "pointer": "/model/registry/entries/inventory-port-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/inventory-port-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/payment-api/type",
+          "value": "Interface"
+        },
+        {
+          "pointer": "/model/registry/entries/payment-port/type",
+          "value": "Port"
+        },
+        {
+          "pointer": "/model/registry/entries/payment-port-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/payment-port-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/payments/type",
+          "value": "Component"
+        },
+        {
+          "pointer": "/model/registry/entries/provides-inventory/type",
+          "value": "InterfaceRealization"
+        },
+        {
+          "pointer": "/model/registry/entries/provides-payment/type",
+          "value": "InterfaceRealization"
+        },
+        {
+          "pointer": "/model/registry/entries/uses-inventory/type",
+          "value": "Usage"
+        },
+        {
+          "pointer": "/model/registry/entries/uses-payment/type",
+          "value": "Usage"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "component-invalid",
@@ -169,13 +752,6 @@
       "diagram_kind": "component",
       "diagram_id": "diagram",
       "expected": "invalid",
-      "diagnostics": [
-        {
-          "code": "UML_COMPONENT_NO_NESTED_CLASSIFIERS",
-          "subject_id": "checkout",
-          "severity": "error"
-        }
-      ],
       "coverage": [
         "Component",
         "packaged implementation Class",
@@ -184,7 +760,31 @@
         "InterfaceRealization"
       ],
       "rule": "Component-no_nested_classifiers: component declares nestedClassifier",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/checkout/data/nestedClassifier",
+          "value": [
+            "implementation"
+          ]
+        }
+      ],
+      "historical_diagnostics": [
+        {
+          "code": "UML_COMPONENT_NO_NESTED_CLASSIFIERS",
+          "subject_id": "checkout",
+          "severity": "error"
+        }
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "composite_structure-valid",
@@ -192,7 +792,6 @@
       "diagram_kind": "composite_structure",
       "diagram_id": "diagram",
       "expected": "valid",
-      "diagnostics": [],
       "coverage": [
         "StructuredClassifier context",
         "composite parts",
@@ -201,7 +800,115 @@
         "ConnectorEnd/role/multiplicity"
       ],
       "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/api/type",
+          "value": "Interface"
+        },
+        {
+          "pointer": "/model/registry/entries/connector/type",
+          "value": "Connector"
+        },
+        {
+          "pointer": "/model/registry/entries/foreign/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/foreign-part/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/foreign-part-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/foreign-part-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/public-port/type",
+          "value": "Port"
+        },
+        {
+          "pointer": "/model/registry/entries/public-port-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/public-port-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/storage/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/storage-end/type",
+          "value": "ConnectorEnd"
+        },
+        {
+          "pointer": "/model/registry/entries/storage-end-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/storage-end-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/storage-part/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/storage-part-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/storage-part-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/system/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/worker/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/worker-end/type",
+          "value": "ConnectorEnd"
+        },
+        {
+          "pointer": "/model/registry/entries/worker-end-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/worker-end-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/worker-part/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/worker-part-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/worker-part-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "composite_structure-invalid",
@@ -209,13 +916,6 @@
       "diagram_kind": "composite_structure",
       "diagram_id": "diagram",
       "expected": "invalid",
-      "diagnostics": [
-        {
-          "code": "UML_CONNECTOR_ROLES",
-          "subject_id": "connector",
-          "severity": "error"
-        }
-      ],
       "coverage": [
         "StructuredClassifier context",
         "composite parts",
@@ -224,7 +924,29 @@
         "ConnectorEnd/role/multiplicity"
       ],
       "rule": "Connector-roles: end role is neither a role of owning StructuredClassifier nor a port of one of its parts",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/storage-end/data/role",
+          "value": "foreign-part"
+        }
+      ],
+      "historical_diagnostics": [
+        {
+          "code": "UML_CONNECTOR_ROLES",
+          "subject_id": "connector",
+          "severity": "error"
+        }
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "deployment-valid",
@@ -232,7 +954,6 @@
       "diagram_kind": "deployment",
       "diagram_id": "diagram",
       "expected": "valid",
-      "diagnostics": [],
       "coverage": [
         "Device",
         "nested ExecutionEnvironment",
@@ -243,7 +964,91 @@
         "CommunicationPath"
       ],
       "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/artifact/type",
+          "value": "Artifact"
+        },
+        {
+          "pointer": "/model/registry/entries/database-host/type",
+          "value": "Device"
+        },
+        {
+          "pointer": "/model/registry/entries/database-runtime/type",
+          "value": "ExecutionEnvironment"
+        },
+        {
+          "pointer": "/model/registry/entries/deployment/type",
+          "value": "Deployment"
+        },
+        {
+          "pointer": "/model/registry/entries/host/type",
+          "value": "Device"
+        },
+        {
+          "pointer": "/model/registry/entries/manifestation/type",
+          "value": "Manifestation"
+        },
+        {
+          "pointer": "/model/registry/entries/network/type",
+          "value": "CommunicationPath"
+        },
+        {
+          "pointer": "/model/registry/entries/network-app/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/network-app-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/network-app-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/network-db/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/network-db-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/network-db-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/runtime/type",
+          "value": "ExecutionEnvironment"
+        },
+        {
+          "pointer": "/model/registry/entries/schema/type",
+          "value": "Artifact"
+        },
+        {
+          "pointer": "/model/registry/entries/schema-deployment/type",
+          "value": "Deployment"
+        },
+        {
+          "pointer": "/model/registry/entries/service/type",
+          "value": "Component"
+        },
+        {
+          "pointer": "/model/registry/entries/specification/type",
+          "value": "DeploymentSpecification"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "deployment-invalid",
@@ -251,13 +1056,6 @@
       "diagram_kind": "deployment",
       "diagram_id": "diagram",
       "expected": "invalid",
-      "diagnostics": [
-        {
-          "code": "UML_DEPLOYMENT_SPECIFICATION_TARGET",
-          "subject_id": "specification",
-          "severity": "error"
-        }
-      ],
       "coverage": [
         "Device",
         "nested ExecutionEnvironment",
@@ -268,7 +1066,29 @@
         "CommunicationPath"
       ],
       "rule": "DeploymentSpecification-deployment_target: configured deployment location is Node, not ExecutionEnvironment",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/runtime/type",
+          "value": "Node"
+        }
+      ],
+      "historical_diagnostics": [
+        {
+          "code": "UML_DEPLOYMENT_SPECIFICATION_TARGET",
+          "subject_id": "specification",
+          "severity": "error"
+        }
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "profile-valid",
@@ -276,7 +1096,6 @@
       "diagram_kind": "profile",
       "diagram_id": "diagram",
       "expected": "valid",
-      "diagnostics": [],
       "coverage": [
         "Profile/metaclassReference",
         "ElementImport",
@@ -286,7 +1105,119 @@
         "typed stereotype attribute"
       ],
       "rule": "Baseline with no semantic errors; unsupported warnings remain visible.",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/class-import/type",
+          "value": "ElementImport"
+        },
+        {
+          "pointer": "/model/registry/entries/entity/type",
+          "value": "Stereotype"
+        },
+        {
+          "pointer": "/model/registry/entries/entity-extension/type",
+          "value": "Extension"
+        },
+        {
+          "pointer": "/model/registry/entries/entity-extension-base/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/entity-extension-base-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/entity-extension-base-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/entity-extension-end/type",
+          "value": "ExtensionEnd"
+        },
+        {
+          "pointer": "/model/registry/entries/entity-extension-end-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/entity-extension-end-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/local/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/metaclass/type",
+          "value": "Class"
+        },
+        {
+          "pointer": "/model/registry/entries/metamodel/type",
+          "value": "Package"
+        },
+        {
+          "pointer": "/model/registry/entries/profile/type",
+          "value": "Profile"
+        },
+        {
+          "pointer": "/model/registry/entries/service/type",
+          "value": "Stereotype"
+        },
+        {
+          "pointer": "/model/registry/entries/service-extension/type",
+          "value": "Extension"
+        },
+        {
+          "pointer": "/model/registry/entries/service-extension-base/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/service-extension-base-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/service-extension-base-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/service-extension-end/type",
+          "value": "ExtensionEnd"
+        },
+        {
+          "pointer": "/model/registry/entries/service-extension-end-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/service-extension-end-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/service-name/type",
+          "value": "Property"
+        },
+        {
+          "pointer": "/model/registry/entries/service-name-lowerValue-value/type",
+          "value": "LiteralInteger"
+        },
+        {
+          "pointer": "/model/registry/entries/service-name-upperValue-value/type",
+          "value": "LiteralUnlimitedNatural"
+        },
+        {
+          "pointer": "/model/registry/entries/string/type",
+          "value": "PrimitiveType"
+        }
+      ],
+      "historical_diagnostics": [],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     },
     {
       "id": "profile-invalid",
@@ -294,13 +1225,6 @@
       "diagram_kind": "profile",
       "diagram_id": "diagram",
       "expected": "invalid",
-      "diagnostics": [
-        {
-          "code": "UML_PROFILE_METACLASS_REFERENCE_SPECIALIZATION",
-          "subject_id": "profile",
-          "severity": "error"
-        }
-      ],
       "coverage": [
         "Profile/metaclassReference",
         "ElementImport",
@@ -310,7 +1234,41 @@
         "typed stereotype attribute"
       ],
       "rule": "Profile-metaclass_reference_not_specialized: owned Class specializes an imported metaclass",
-      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics."
+      "validity_scope": "Candidate valid baseline for implemented contracts, not exhaustive UML 2.5.1 certification. Full BDD execution must retain and report unsupported diagnostics.",
+      "witnesses": [
+        {
+          "pointer": "/model/rootModel",
+          "value": "root"
+        },
+        {
+          "pointer": "/model/registry/entries/root/type",
+          "value": "Model"
+        },
+        {
+          "pointer": "/model/registry/entries/invalid-specialization",
+          "value": {
+            "id": "invalid-specialization",
+            "type": "Generalization",
+            "data": {
+              "id": "invalid-specialization",
+              "eAnnotations": [],
+              "ownedComment": [],
+              "isSubstitutable": null,
+              "generalizationSet": [],
+              "specific": "local",
+              "general": "metaclass"
+            }
+          }
+        }
+      ],
+      "historical_diagnostics": [
+        {
+          "code": "UML_PROFILE_METACLASS_REFERENCE_SPECIALIZATION",
+          "subject_id": "profile",
+          "severity": "error"
+        }
+      ],
+      "acceptance": "Preserve the complete authored canonical project through public JSON and BLX2 import/save/reopen APIs. Historical validity labels do not assert UML conformance."
     }
   ]
 }

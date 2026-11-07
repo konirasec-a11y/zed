@@ -1,705 +1,1313 @@
 {
-  "schema_version": 1,
+  "schemaVersion": 2,
   "id": "overview-project",
   "name": "Order interaction overview",
-  "root_model": "root",
-  "elements": [
-    {
-      "id": "root",
-      "kind": "uml.model",
-      "name": "Interaction fixture",
-      "properties": {}
-    },
-    {
-      "id": "system",
-      "kind": "uml.class",
-      "name": "CheckoutSystem",
-      "properties": {}
-    },
-    {
-      "id": "interaction",
-      "kind": "uml.interaction",
-      "name": "Order interaction overview",
-      "properties": {
-        "lifeline": [
-          {
-            "$ref": "customer"
-          },
-          {
-            "$ref": "service"
-          },
-          {
-            "$ref": "stock"
+  "model": {
+    "registry": {
+      "entries": {
+        "auth-call": {
+          "id": "auth-call",
+          "type": "CallBehaviorAction",
+          "data": {
+            "id": "auth-call",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Authenticate customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "flow",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "handler": [],
+            "localPrecondition": [],
+            "localPostcondition": [],
+            "argument": [],
+            "onPort": null,
+            "isSynchronous": "true",
+            "result": [],
+            "behavior": "authenticate"
           }
-        ],
-        "fragment": [
-          {
-            "$ref": "use-authenticate"
-          },
-          {
-            "$ref": "use-fulfill"
+        },
+        "auth-decision": {
+          "id": "auth-decision",
+          "type": "ControlFlow",
+          "data": {
+            "id": "auth-decision",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "flow",
+            "source": "auth-call",
+            "target": "decision",
+            "guard": "auth-decision-guard-value",
+            "weight": "auth-decision-weight-value"
           }
+        },
+        "auth-decision-guard-value": {
+          "id": "auth-decision-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "auth-decision-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "auth-decision-weight-value": {
+          "id": "auth-decision-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "auth-decision-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "authenticate": {
+          "id": "authenticate",
+          "type": "Interaction",
+          "data": {
+            "id": "authenticate",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Authenticate customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "isReentrant": "true",
+            "redefinedBehavior": [],
+            "ownedParameter": [],
+            "precondition": [],
+            "postcondition": [],
+            "ownedParameterSet": [],
+            "specification": null,
+            "covered": [],
+            "generalOrdering": [],
+            "enclosingInteraction": null,
+            "enclosingOperand": null,
+            "lifeline": [],
+            "fragment": [],
+            "action": [],
+            "formalGate": [],
+            "message": []
+          }
+        },
+        "authorized": {
+          "id": "authorized",
+          "type": "ControlFlow",
+          "data": {
+            "id": "authorized",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "flow",
+            "guard": "authorized-guard",
+            "source": "decision",
+            "target": "fulfill-call",
+            "weight": "authorized-weight-value"
+          }
+        },
+        "authorized-guard": {
+          "id": "authorized-guard",
+          "type": "OpaqueExpression",
+          "data": {
+            "id": "authorized-guard",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "authorized",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "body": [
+              "authorized"
+            ],
+            "language": [
+              "OCL"
+            ],
+            "behavior": null
+          }
+        },
+        "authorized-weight-value": {
+          "id": "authorized-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "authorized-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "customer": {
+          "id": "customer",
+          "type": "Lifeline",
+          "data": {
+            "id": "customer",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "represents": "customer-role",
+            "selector": null,
+            "decomposedAs": null,
+            "coveredBy": [],
+            "interaction": "interaction"
+          }
+        },
+        "customer-role": {
+          "id": "customer-role",
+          "type": "Property",
+          "data": {
+            "id": "customer-role",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "customer-type",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": null,
+            "lowerValue": null,
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "customer-type": {
+          "id": "customer-type",
+          "type": "Class",
+          "data": {
+            "id": "customer-type",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "decision": {
+          "id": "decision",
+          "type": "DecisionNode",
+          "data": {
+            "id": "decision",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Authorized?",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "flow",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "decisionInput": null
+          }
+        },
+        "denied": {
+          "id": "denied",
+          "type": "ControlFlow",
+          "data": {
+            "id": "denied",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "flow",
+            "guard": "denied-guard",
+            "source": "decision",
+            "target": "final",
+            "weight": "denied-weight-value"
+          }
+        },
+        "denied-guard": {
+          "id": "denied-guard",
+          "type": "OpaqueExpression",
+          "data": {
+            "id": "denied-guard",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "else",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "body": [
+              "else"
+            ],
+            "language": [
+              "OCL"
+            ],
+            "behavior": null
+          }
+        },
+        "denied-weight-value": {
+          "id": "denied-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "denied-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "final": {
+          "id": "final",
+          "type": "ActivityFinalNode",
+          "data": {
+            "id": "final",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Finished",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "flow",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": []
+          }
+        },
+        "finish-order": {
+          "id": "finish-order",
+          "type": "ControlFlow",
+          "data": {
+            "id": "finish-order",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "flow",
+            "source": "fulfill-call",
+            "target": "final",
+            "guard": "finish-order-guard-value",
+            "weight": "finish-order-weight-value"
+          }
+        },
+        "finish-order-guard-value": {
+          "id": "finish-order-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "finish-order-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "finish-order-weight-value": {
+          "id": "finish-order-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "finish-order-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "flow": {
+          "id": "flow",
+          "type": "Activity",
+          "data": {
+            "id": "flow",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Overview control flow",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "isReentrant": "true",
+            "redefinedBehavior": [],
+            "ownedParameter": [],
+            "precondition": [],
+            "postcondition": [],
+            "ownedParameterSet": [],
+            "specification": null,
+            "variable": [],
+            "node": [
+              "initial",
+              "auth-call",
+              "decision",
+              "fulfill-call",
+              "final"
+            ],
+            "isReadOnly": "false",
+            "edge": [
+              "start-auth",
+              "auth-decision",
+              "authorized",
+              "denied",
+              "finish-order"
+            ],
+            "partition": [],
+            "isSingleExecution": "false",
+            "group": []
+          }
+        },
+        "fulfill": {
+          "id": "fulfill",
+          "type": "Interaction",
+          "data": {
+            "id": "fulfill",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Fulfill order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "isReentrant": "true",
+            "redefinedBehavior": [],
+            "ownedParameter": [],
+            "precondition": [],
+            "postcondition": [],
+            "ownedParameterSet": [],
+            "specification": null,
+            "covered": [],
+            "generalOrdering": [],
+            "enclosingInteraction": null,
+            "enclosingOperand": null,
+            "lifeline": [],
+            "fragment": [],
+            "action": [],
+            "formalGate": [],
+            "message": []
+          }
+        },
+        "fulfill-call": {
+          "id": "fulfill-call",
+          "type": "CallBehaviorAction",
+          "data": {
+            "id": "fulfill-call",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Fulfill order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "flow",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": [],
+            "handler": [],
+            "localPrecondition": [],
+            "localPostcondition": [],
+            "argument": [],
+            "onPort": null,
+            "isSynchronous": "true",
+            "result": [],
+            "behavior": "fulfill"
+          }
+        },
+        "initial": {
+          "id": "initial",
+          "type": "InitialNode",
+          "data": {
+            "id": "initial",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Start",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "inStructuredNode": null,
+            "activity": "flow",
+            "outgoing": [],
+            "incoming": [],
+            "inPartition": [],
+            "inInterruptibleRegion": [],
+            "redefinedNode": []
+          }
+        },
+        "interaction": {
+          "id": "interaction",
+          "type": "Interaction",
+          "data": {
+            "id": "interaction",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Order interaction overview",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "isReentrant": "true",
+            "redefinedBehavior": [],
+            "ownedParameter": [],
+            "precondition": [],
+            "postcondition": [],
+            "ownedParameterSet": [],
+            "specification": null,
+            "covered": [],
+            "generalOrdering": [],
+            "enclosingInteraction": null,
+            "enclosingOperand": null,
+            "lifeline": [
+              "customer",
+              "service",
+              "stock"
+            ],
+            "fragment": [
+              "use-authenticate",
+              "use-fulfill"
+            ],
+            "action": [],
+            "formalGate": [],
+            "message": []
+          }
+        },
+        "root": {
+          "id": "root",
+          "type": "Model",
+          "data": {
+            "id": "root",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Interaction fixture",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "system",
+              "customer-type",
+              "service-type",
+              "stock-type"
+            ],
+            "profileApplication": [],
+            "viewpoint": null
+          }
+        },
+        "service": {
+          "id": "service",
+          "type": "Lifeline",
+          "data": {
+            "id": "service",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "service",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "represents": "service-role",
+            "selector": null,
+            "decomposedAs": null,
+            "coveredBy": [],
+            "interaction": "interaction"
+          }
+        },
+        "service-role": {
+          "id": "service-role",
+          "type": "Property",
+          "data": {
+            "id": "service-role",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "service",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "service-type",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": null,
+            "lowerValue": null,
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "service-type": {
+          "id": "service-type",
+          "type": "Class",
+          "data": {
+            "id": "service-type",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "CheckoutService",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "start-auth": {
+          "id": "start-auth",
+          "type": "ControlFlow",
+          "data": {
+            "id": "start-auth",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "redefinedEdge": [],
+            "inPartition": [],
+            "interrupts": null,
+            "inStructuredNode": null,
+            "activity": "flow",
+            "source": "initial",
+            "target": "auth-call",
+            "guard": "start-auth-guard-value",
+            "weight": "start-auth-weight-value"
+          }
+        },
+        "start-auth-guard-value": {
+          "id": "start-auth-guard-value",
+          "type": "LiteralBoolean",
+          "data": {
+            "id": "start-auth-guard-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "true"
+          }
+        },
+        "start-auth-weight-value": {
+          "id": "start-auth-weight-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "start-auth-weight-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "stock": {
+          "id": "stock",
+          "type": "Lifeline",
+          "data": {
+            "id": "stock",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "stock",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "represents": "stock-role",
+            "selector": null,
+            "decomposedAs": null,
+            "coveredBy": [],
+            "interaction": "interaction"
+          }
+        },
+        "stock-role": {
+          "id": "stock-role",
+          "type": "Property",
+          "data": {
+            "id": "stock-role",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "stock",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "stock-type",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": null,
+            "lowerValue": null,
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "stock-type": {
+          "id": "stock-type",
+          "type": "Class",
+          "data": {
+            "id": "stock-type",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Inventory",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "system": {
+          "id": "system",
+          "type": "Class",
+          "data": {
+            "id": "system",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "CheckoutSystem",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "customer-role",
+              "service-role",
+              "stock-role"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [
+              "interaction",
+              "authenticate",
+              "fulfill",
+              "flow"
+            ],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "use-authenticate": {
+          "id": "use-authenticate",
+          "type": "InteractionUse",
+          "data": {
+            "id": "use-authenticate",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Authenticate customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "covered": [
+              "customer",
+              "service",
+              "stock"
+            ],
+            "generalOrdering": [],
+            "enclosingInteraction": "interaction",
+            "enclosingOperand": null,
+            "actualGate": [],
+            "argument": [],
+            "refersTo": "system"
+          }
+        },
+        "use-fulfill": {
+          "id": "use-fulfill",
+          "type": "InteractionUse",
+          "data": {
+            "id": "use-fulfill",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Fulfill order",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "covered": [
+              "customer",
+              "service",
+              "stock"
+            ],
+            "generalOrdering": [],
+            "enclosingInteraction": "interaction",
+            "enclosingOperand": null,
+            "actualGate": [],
+            "argument": [],
+            "refersTo": "fulfill"
+          }
+        }
+      }
+    },
+    "rootModel": "root",
+    "diagrams": [
+      {
+        "id": "overview-diagram",
+        "name": "Order interaction overview",
+        "uml_di_type": "UMLInteractionDiagram",
+        "interaction_kind": "overview",
+        "model_elements": [
+          "interaction"
         ],
-        "message": []
-      }
-    },
-    {
-      "id": "customer-type",
-      "kind": "uml.class",
-      "name": "Customer",
-      "properties": {}
-    },
-    {
-      "id": "customer-role",
-      "kind": "uml.property",
-      "name": "customer",
-      "properties": {
-        "type": {
-          "$ref": "customer-type"
-        }
-      }
-    },
-    {
-      "id": "customer",
-      "kind": "uml.lifeline",
-      "name": "customer",
-      "properties": {
-        "represents": {
-          "$ref": "customer-role"
-        },
-        "interaction": {
-          "$ref": "interaction"
-        }
-      }
-    },
-    {
-      "id": "service-type",
-      "kind": "uml.class",
-      "name": "CheckoutService",
-      "properties": {}
-    },
-    {
-      "id": "service-role",
-      "kind": "uml.property",
-      "name": "service",
-      "properties": {
-        "type": {
-          "$ref": "service-type"
-        }
-      }
-    },
-    {
-      "id": "service",
-      "kind": "uml.lifeline",
-      "name": "service",
-      "properties": {
-        "represents": {
-          "$ref": "service-role"
-        },
-        "interaction": {
-          "$ref": "interaction"
-        }
-      }
-    },
-    {
-      "id": "stock-type",
-      "kind": "uml.class",
-      "name": "Inventory",
-      "properties": {}
-    },
-    {
-      "id": "stock-role",
-      "kind": "uml.property",
-      "name": "stock",
-      "properties": {
-        "type": {
-          "$ref": "stock-type"
-        }
-      }
-    },
-    {
-      "id": "stock",
-      "kind": "uml.lifeline",
-      "name": "stock",
-      "properties": {
-        "represents": {
-          "$ref": "stock-role"
-        },
-        "interaction": {
-          "$ref": "interaction"
-        }
-      }
-    },
-    {
-      "id": "authenticate",
-      "kind": "uml.interaction",
-      "name": "Authenticate customer",
-      "properties": {}
-    },
-    {
-      "id": "use-authenticate",
-      "kind": "uml.interaction_use",
-      "name": "Authenticate customer",
-      "properties": {
-        "refersTo": {
-          "$ref": "system"
-        },
-        "covered": [
+        "width": 1200,
+        "height": 900,
+        "views": [
           {
-            "$ref": "customer"
+            "id": "view-initial",
+            "subject": "initial",
+            "geometry": {
+              "kind": "rect",
+              "x": 560,
+              "y": 40,
+              "width": 30,
+              "height": 30
+            },
+            "style": {},
+            "z_index": 1
           },
           {
-            "$ref": "service"
+            "id": "view-use-authenticate",
+            "subject": "use-authenticate",
+            "geometry": {
+              "kind": "rect",
+              "x": 800,
+              "y": 110,
+              "width": 280,
+              "height": 100
+            },
+            "style": {},
+            "z_index": 1
           },
           {
-            "$ref": "stock"
+            "id": "view-decision",
+            "subject": "decision",
+            "geometry": {
+              "kind": "rect",
+              "x": 560,
+              "y": 270,
+              "width": 50,
+              "height": 50
+            },
+            "style": {},
+            "z_index": 1
+          },
+          {
+            "id": "view-use-fulfill",
+            "subject": "use-fulfill",
+            "geometry": {
+              "kind": "rect",
+              "x": 800,
+              "y": 390,
+              "width": 280,
+              "height": 100
+            },
+            "style": {},
+            "z_index": 1
+          },
+          {
+            "id": "view-final",
+            "subject": "final",
+            "geometry": {
+              "kind": "rect",
+              "x": 560,
+              "y": 620,
+              "width": 40,
+              "height": 40
+            },
+            "style": {},
+            "z_index": 1
+          },
+          {
+            "id": "view-start-auth",
+            "subject": "start-auth",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 575,
+                "y": 70
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 575,
+                    "y": 110
+                  }
+                }
+              ]
+            },
+            "style": {},
+            "z_index": 0
+          },
+          {
+            "id": "view-auth-decision",
+            "subject": "auth-decision",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 575,
+                "y": 210
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 575,
+                    "y": 270
+                  }
+                }
+              ]
+            },
+            "style": {},
+            "z_index": 0
+          },
+          {
+            "id": "view-authorized",
+            "subject": "authorized",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 585,
+                "y": 320
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 585,
+                    "y": 390
+                  }
+                }
+              ]
+            },
+            "style": {},
+            "z_index": 0
+          },
+          {
+            "id": "view-denied",
+            "subject": "denied",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 610,
+                "y": 295
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 900,
+                    "y": 295
+                  }
+                },
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 900,
+                    "y": 640
+                  }
+                },
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 600,
+                    "y": 640
+                  }
+                }
+              ]
+            },
+            "style": {},
+            "z_index": 0
+          },
+          {
+            "id": "view-finish-order",
+            "subject": "finish-order",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 575,
+                "y": 490
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 575,
+                    "y": 620
+                  }
+                }
+              ]
+            },
+            "style": {},
+            "z_index": 0
+          },
+          {
+            "id": "view-auth-call",
+            "subject": "auth-call",
+            "geometry": {
+              "kind": "rect",
+              "x": 440,
+              "y": 110,
+              "width": 280,
+              "height": 100
+            },
+            "style": {},
+            "z_index": 1
+          },
+          {
+            "id": "view-fulfill-call",
+            "subject": "fulfill-call",
+            "geometry": {
+              "kind": "rect",
+              "x": 440,
+              "y": 390,
+              "width": 280,
+              "height": 100
+            },
+            "style": {},
+            "z_index": 1
           }
         ]
       }
-    },
-    {
-      "id": "fulfill",
-      "kind": "uml.interaction",
-      "name": "Fulfill order",
-      "properties": {}
-    },
-    {
-      "id": "use-fulfill",
-      "kind": "uml.interaction_use",
-      "name": "Fulfill order",
-      "properties": {
-        "refersTo": {
-          "$ref": "fulfill"
-        },
-        "covered": [
-          {
-            "$ref": "customer"
-          },
-          {
-            "$ref": "service"
-          },
-          {
-            "$ref": "stock"
-          }
-        ]
-      }
-    },
-    {
-      "id": "flow",
-      "kind": "uml.activity",
-      "name": "Overview control flow",
-      "properties": {}
-    },
-    {
-      "id": "initial",
-      "kind": "uml.initial_node",
-      "name": "Start",
-      "properties": {}
-    },
-    {
-      "id": "auth-call",
-      "kind": "uml.call_behavior_action",
-      "name": "Authenticate customer",
-      "properties": {
-        "behavior": {
-          "$ref": "authenticate"
-        },
-        "isSynchronous": true
-      }
-    },
-    {
-      "id": "decision",
-      "kind": "uml.decision_node",
-      "name": "Authorized?",
-      "properties": {}
-    },
-    {
-      "id": "fulfill-call",
-      "kind": "uml.call_behavior_action",
-      "name": "Fulfill order",
-      "properties": {
-        "behavior": {
-          "$ref": "fulfill"
-        },
-        "isSynchronous": true
-      }
-    },
-    {
-      "id": "final",
-      "kind": "uml.activity_final_node",
-      "name": "Finished",
-      "properties": {}
-    },
-    {
-      "id": "authorized-guard",
-      "kind": "uml.opaque_expression",
-      "name": "authorized",
-      "properties": {
-        "language": [
-          "OCL"
-        ],
-        "body": [
-          "authorized"
-        ],
-        "visibility": null
-      }
-    },
-    {
-      "id": "denied-guard",
-      "kind": "uml.opaque_expression",
-      "name": "else",
-      "properties": {
-        "language": [
-          "OCL"
-        ],
-        "body": [
-          "else"
-        ],
-        "visibility": null
-      }
-    }
-  ],
-  "relations": [
-    {
-      "id": "owns-system",
-      "kind": "owns",
-      "from": "root",
-      "to": "system"
-    },
-    {
-      "id": "owns-interaction",
-      "kind": "owns",
-      "from": "system",
-      "to": "interaction"
-    },
-    {
-      "id": "owns-customer-type",
-      "kind": "owns",
-      "from": "root",
-      "to": "customer-type"
-    },
-    {
-      "id": "owns-customer-role",
-      "kind": "owns",
-      "from": "system",
-      "to": "customer-role"
-    },
-    {
-      "id": "owns-customer",
-      "kind": "owns",
-      "from": "interaction",
-      "to": "customer"
-    },
-    {
-      "id": "owns-service-type",
-      "kind": "owns",
-      "from": "root",
-      "to": "service-type"
-    },
-    {
-      "id": "owns-service-role",
-      "kind": "owns",
-      "from": "system",
-      "to": "service-role"
-    },
-    {
-      "id": "owns-service",
-      "kind": "owns",
-      "from": "interaction",
-      "to": "service"
-    },
-    {
-      "id": "owns-stock-type",
-      "kind": "owns",
-      "from": "root",
-      "to": "stock-type"
-    },
-    {
-      "id": "owns-stock-role",
-      "kind": "owns",
-      "from": "system",
-      "to": "stock-role"
-    },
-    {
-      "id": "owns-stock",
-      "kind": "owns",
-      "from": "interaction",
-      "to": "stock"
-    },
-    {
-      "id": "owns-authenticate",
-      "kind": "owns",
-      "from": "system",
-      "to": "authenticate"
-    },
-    {
-      "id": "owns-use-authenticate",
-      "kind": "owns",
-      "from": "interaction",
-      "to": "use-authenticate"
-    },
-    {
-      "id": "owns-fulfill",
-      "kind": "owns",
-      "from": "system",
-      "to": "fulfill"
-    },
-    {
-      "id": "owns-use-fulfill",
-      "kind": "owns",
-      "from": "interaction",
-      "to": "use-fulfill"
-    },
-    {
-      "id": "owns-flow",
-      "kind": "owns",
-      "from": "system",
-      "to": "flow"
-    },
-    {
-      "id": "owns-initial",
-      "kind": "owns",
-      "from": "flow",
-      "to": "initial"
-    },
-    {
-      "id": "owns-auth-call",
-      "kind": "owns",
-      "from": "flow",
-      "to": "auth-call"
-    },
-    {
-      "id": "owns-decision",
-      "kind": "owns",
-      "from": "flow",
-      "to": "decision"
-    },
-    {
-      "id": "owns-fulfill-call",
-      "kind": "owns",
-      "from": "flow",
-      "to": "fulfill-call"
-    },
-    {
-      "id": "owns-final",
-      "kind": "owns",
-      "from": "flow",
-      "to": "final"
-    },
-    {
-      "id": "start-auth",
-      "kind": "uml.control_flow",
-      "from": "initial",
-      "to": "auth-call",
-      "properties": {}
-    },
-    {
-      "id": "owns-start-auth",
-      "kind": "owns",
-      "from": "flow",
-      "to": "start-auth"
-    },
-    {
-      "id": "auth-decision",
-      "kind": "uml.control_flow",
-      "from": "auth-call",
-      "to": "decision",
-      "properties": {}
-    },
-    {
-      "id": "owns-auth-decision",
-      "kind": "owns",
-      "from": "flow",
-      "to": "auth-decision"
-    },
-    {
-      "id": "owns-authorized-guard",
-      "kind": "owns",
-      "from": "authorized",
-      "to": "authorized-guard"
-    },
-    {
-      "id": "authorized",
-      "kind": "uml.control_flow",
-      "from": "decision",
-      "to": "fulfill-call",
-      "properties": {
-        "guard": {
-          "$ref": "authorized-guard"
-        }
-      }
-    },
-    {
-      "id": "owns-authorized",
-      "kind": "owns",
-      "from": "flow",
-      "to": "authorized"
-    },
-    {
-      "id": "owns-denied-guard",
-      "kind": "owns",
-      "from": "denied",
-      "to": "denied-guard"
-    },
-    {
-      "id": "denied",
-      "kind": "uml.control_flow",
-      "from": "decision",
-      "to": "final",
-      "properties": {
-        "guard": {
-          "$ref": "denied-guard"
-        }
-      }
-    },
-    {
-      "id": "owns-denied",
-      "kind": "owns",
-      "from": "flow",
-      "to": "denied"
-    },
-    {
-      "id": "finish-order",
-      "kind": "uml.control_flow",
-      "from": "fulfill-call",
-      "to": "final",
-      "properties": {}
-    },
-    {
-      "id": "owns-finish-order",
-      "kind": "owns",
-      "from": "flow",
-      "to": "finish-order"
-    }
-  ],
-  "diagrams": [
-    {
-      "id": "overview-diagram",
-      "name": "Order interaction overview",
-      "uml_di_type": "UMLInteractionDiagram",
-      "interaction_kind": "overview",
-      "model_elements": [
-        "interaction"
-      ],
-      "width": 1200,
-      "height": 900,
-      "views": [
-        {
-          "id": "view-initial",
-          "subject": "initial",
-          "geometry": {
-            "kind": "rect",
-            "x": 560,
-            "y": 40,
-            "width": 30,
-            "height": 30
-          },
-          "style": {},
-          "z_index": 1
-        },
-        {
-          "id": "view-use-authenticate",
-          "subject": "use-authenticate",
-          "geometry": {
-            "kind": "rect",
-            "x": 800,
-            "y": 110,
-            "width": 280,
-            "height": 100
-          },
-          "style": {},
-          "z_index": 1
-        },
-        {
-          "id": "view-decision",
-          "subject": "decision",
-          "geometry": {
-            "kind": "rect",
-            "x": 560,
-            "y": 270,
-            "width": 50,
-            "height": 50
-          },
-          "style": {},
-          "z_index": 1
-        },
-        {
-          "id": "view-use-fulfill",
-          "subject": "use-fulfill",
-          "geometry": {
-            "kind": "rect",
-            "x": 800,
-            "y": 390,
-            "width": 280,
-            "height": 100
-          },
-          "style": {},
-          "z_index": 1
-        },
-        {
-          "id": "view-final",
-          "subject": "final",
-          "geometry": {
-            "kind": "rect",
-            "x": 560,
-            "y": 620,
-            "width": 40,
-            "height": 40
-          },
-          "style": {},
-          "z_index": 1
-        },
-        {
-          "id": "view-start-auth",
-          "subject": "start-auth",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 575,
-              "y": 70
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 575,
-                  "y": 110
-                }
-              }
-            ]
-          },
-          "style": {},
-          "z_index": 0
-        },
-        {
-          "id": "view-auth-decision",
-          "subject": "auth-decision",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 575,
-              "y": 210
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 575,
-                  "y": 270
-                }
-              }
-            ]
-          },
-          "style": {},
-          "z_index": 0
-        },
-        {
-          "id": "view-authorized",
-          "subject": "authorized",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 585,
-              "y": 320
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 585,
-                  "y": 390
-                }
-              }
-            ]
-          },
-          "style": {},
-          "z_index": 0
-        },
-        {
-          "id": "view-denied",
-          "subject": "denied",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 610,
-              "y": 295
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 900,
-                  "y": 295
-                }
-              },
-              {
-                "kind": "line",
-                "to": {
-                  "x": 900,
-                  "y": 640
-                }
-              },
-              {
-                "kind": "line",
-                "to": {
-                  "x": 600,
-                  "y": 640
-                }
-              }
-            ]
-          },
-          "style": {},
-          "z_index": 0
-        },
-        {
-          "id": "view-finish-order",
-          "subject": "finish-order",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 575,
-              "y": 490
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 575,
-                  "y": 620
-                }
-              }
-            ]
-          },
-          "style": {},
-          "z_index": 0
-        },
-        {
-          "id": "view-auth-call",
-          "subject": "auth-call",
-          "geometry": {
-            "kind": "rect",
-            "x": 440,
-            "y": 110,
-            "width": 280,
-            "height": 100
-          },
-          "style": {},
-          "z_index": 1
-        },
-        {
-          "id": "view-fulfill-call",
-          "subject": "fulfill-call",
-          "geometry": {
-            "kind": "rect",
-            "x": 440,
-            "y": 390,
-            "width": 280,
-            "height": 100
-          },
-          "style": {},
-          "z_index": 1
-        }
-      ]
-    }
-  ]
+    ]
+  }
 }

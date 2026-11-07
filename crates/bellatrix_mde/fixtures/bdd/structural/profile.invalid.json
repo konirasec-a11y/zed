@@ -1,397 +1,877 @@
 {
-  "schema_version": 1,
+  "schemaVersion": 2,
   "id": "profile-project",
   "name": "Service architecture profile",
-  "root_model": "root",
-  "elements": [
-    {
-      "id": "root",
-      "kind": "uml.model",
-      "name": "Service architecture profile",
-      "properties": {}
+  "model": {
+    "registry": {
+      "entries": {
+        "class-import": {
+          "id": "class-import",
+          "type": "ElementImport",
+          "data": {
+            "id": "class-import",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "visibility": "Public",
+            "alias": null,
+            "importingNamespace": "profile",
+            "importedElement": "metaclass"
+          }
+        },
+        "entity": {
+          "id": "entity",
+          "type": "Stereotype",
+          "data": {
+            "id": "entity",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Entity",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "entity-extension-base"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "icon": []
+          }
+        },
+        "entity-extension": {
+          "id": "entity-extension",
+          "type": "Extension",
+          "data": {
+            "id": "entity-extension",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "entity-extension",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedEnd": [
+              "entity-extension-end"
+            ],
+            "memberEnd": [
+              "entity-extension-base",
+              "entity-extension-end"
+            ],
+            "isDerived": "false",
+            "navigableOwnedEnd": []
+          }
+        },
+        "entity-extension-base": {
+          "id": "entity-extension-base",
+          "type": "Property",
+          "data": {
+            "id": "entity-extension-base",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "base_Class",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "metaclass",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "entity-extension-base-upperValue-value",
+            "lowerValue": "entity-extension-base-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "entity-extension-base-lowerValue-value": {
+          "id": "entity-extension-base-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "entity-extension-base-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "entity-extension-base-upperValue-value": {
+          "id": "entity-extension-base-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "entity-extension-base-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "entity-extension-end": {
+          "id": "entity-extension-end",
+          "type": "ExtensionEnd",
+          "data": {
+            "id": "entity-extension-end",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "extension_entity",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "entity",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "entity-extension-end-upperValue-value",
+            "lowerValue": "entity-extension-end-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "Composite",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "entity-extension-end-lowerValue-value": {
+          "id": "entity-extension-end-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "entity-extension-end-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "0"
+          }
+        },
+        "entity-extension-end-upperValue-value": {
+          "id": "entity-extension-end-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "entity-extension-end-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "invalid-specialization": {
+          "id": "invalid-specialization",
+          "type": "Generalization",
+          "data": {
+            "id": "invalid-specialization",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "isSubstitutable": null,
+            "generalizationSet": [],
+            "specific": "local",
+            "general": "metaclass"
+          }
+        },
+        "local": {
+          "id": "local",
+          "type": "Class",
+          "data": {
+            "id": "local",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "LocalHelper",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "metaclass": {
+          "id": "metaclass",
+          "type": "Class",
+          "data": {
+            "id": "metaclass",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Class",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "metamodel": {
+          "id": "metamodel",
+          "type": "Package",
+          "data": {
+            "id": "metamodel",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "UMLMetamodel",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "metaclass"
+            ],
+            "profileApplication": []
+          }
+        },
+        "profile": {
+          "id": "profile",
+          "type": "Profile",
+          "data": {
+            "id": "profile",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "ServiceArchitecture",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "local",
+              "service",
+              "entity",
+              "service-extension",
+              "entity-extension"
+            ],
+            "profileApplication": [],
+            "metaclassReference": [
+              "class-import"
+            ],
+            "metamodelReference": []
+          }
+        },
+        "root": {
+          "id": "root",
+          "type": "Model",
+          "data": {
+            "id": "root",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Service architecture profile",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "profile",
+              "metamodel",
+              "string"
+            ],
+            "profileApplication": [],
+            "viewpoint": null
+          }
+        },
+        "service": {
+          "id": "service",
+          "type": "Stereotype",
+          "data": {
+            "id": "service",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Service",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "service-name",
+              "service-extension-base"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": [],
+            "icon": []
+          }
+        },
+        "service-extension": {
+          "id": "service-extension",
+          "type": "Extension",
+          "data": {
+            "id": "service-extension",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "service-extension",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedEnd": [
+              "service-extension-end"
+            ],
+            "memberEnd": [
+              "service-extension-base",
+              "service-extension-end"
+            ],
+            "isDerived": "false",
+            "navigableOwnedEnd": []
+          }
+        },
+        "service-extension-base": {
+          "id": "service-extension-base",
+          "type": "Property",
+          "data": {
+            "id": "service-extension-base",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "base_Class",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "metaclass",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "service-extension-base-upperValue-value",
+            "lowerValue": "service-extension-base-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "service-extension-base-lowerValue-value": {
+          "id": "service-extension-base-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "service-extension-base-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "service-extension-base-upperValue-value": {
+          "id": "service-extension-base-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "service-extension-base-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "service-extension-end": {
+          "id": "service-extension-end",
+          "type": "ExtensionEnd",
+          "data": {
+            "id": "service-extension-end",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "extension_service",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "service",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "service-extension-end-upperValue-value",
+            "lowerValue": "service-extension-end-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "Composite",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "service-extension-end-lowerValue-value": {
+          "id": "service-extension-end-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "service-extension-end-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "0"
+          }
+        },
+        "service-extension-end-upperValue-value": {
+          "id": "service-extension-end-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "service-extension-end-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "service-name": {
+          "id": "service-name",
+          "type": "Property",
+          "data": {
+            "id": "service-name",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "serviceName",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "string",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "service-name-upperValue-value",
+            "lowerValue": "service-name-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "service-name-lowerValue-value": {
+          "id": "service-name-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "service-name-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "service-name-upperValue-value": {
+          "id": "service-name-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "service-name-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "string": {
+          "id": "string",
+          "type": "PrimitiveType",
+          "data": {
+            "id": "string",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "String",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedOperation": []
+          }
+        }
+      }
     },
-    {
-      "id": "profile",
-      "kind": "uml.profile",
-      "name": "ServiceArchitecture",
-      "properties": {
-        "metaclassReference": [
+    "rootModel": "root",
+    "diagrams": [
+      {
+        "id": "diagram",
+        "name": "Service architecture profile",
+        "uml_di_type": "UMLProfileDiagram",
+        "width": 1240,
+        "height": 800,
+        "model_elements": [],
+        "views": [
           {
-            "$ref": "class-import"
+            "id": "view-profile",
+            "subject": "profile",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-metaclass",
+            "subject": "metaclass",
+            "geometry": {
+              "kind": "rect",
+              "x": 325,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-service",
+            "subject": "service",
+            "geometry": {
+              "kind": "rect",
+              "x": 610,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-entity",
+            "subject": "entity",
+            "geometry": {
+              "kind": "rect",
+              "x": 895,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-service-extension",
+            "subject": "service-extension",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-entity-extension",
+            "subject": "entity-extension",
+            "geometry": {
+              "kind": "rect",
+              "x": 325,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-local",
+            "subject": "local",
+            "geometry": {
+              "kind": "rect",
+              "x": 610,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-class-import",
+            "subject": "class-import",
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 280,
+                "y": 105
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 325,
+                    "y": 105
+                  }
+                }
+              ]
+            },
+            "endpoints": {
+              "source_view_id": "view-profile",
+              "target_view_id": "view-metaclass"
+            },
+            "z_index": 1
           }
         ]
       }
-    },
-    {
-      "id": "metamodel",
-      "kind": "uml.package",
-      "name": "UMLMetamodel",
-      "properties": {}
-    },
-    {
-      "id": "metaclass",
-      "kind": "uml.class",
-      "name": "Class",
-      "properties": {}
-    },
-    {
-      "id": "local",
-      "kind": "uml.class",
-      "name": "LocalHelper",
-      "properties": {}
-    },
-    {
-      "id": "service",
-      "kind": "uml.stereotype",
-      "name": "Service",
-      "properties": {}
-    },
-    {
-      "id": "entity",
-      "kind": "uml.stereotype",
-      "name": "Entity",
-      "properties": {}
-    },
-    {
-      "id": "string",
-      "kind": "uml.primitive_type",
-      "name": "String",
-      "properties": {}
-    },
-    {
-      "id": "service-name",
-      "kind": "uml.attribute",
-      "name": "serviceName",
-      "properties": {
-        "type": {
-          "$ref": "string"
-        },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "service-extension",
-      "kind": "uml.extension",
-      "name": "service-extension",
-      "properties": {
-        "memberEnd": [
-          {
-            "$ref": "service-extension-base"
-          },
-          {
-            "$ref": "service-extension-end"
-          }
-        ],
-        "ownedEnd": {
-          "$ref": "service-extension-end"
-        }
-      }
-    },
-    {
-      "id": "service-extension-base",
-      "kind": "uml.attribute",
-      "name": "base_Class",
-      "properties": {
-        "type": {
-          "$ref": "metaclass"
-        },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "service-extension-end",
-      "kind": "uml.extension_end",
-      "name": "extension_service",
-      "properties": {
-        "type": {
-          "$ref": "service"
-        },
-        "aggregation": "composite",
-        "multiplicity": "0..1"
-      }
-    },
-    {
-      "id": "entity-extension",
-      "kind": "uml.extension",
-      "name": "entity-extension",
-      "properties": {
-        "memberEnd": [
-          {
-            "$ref": "entity-extension-base"
-          },
-          {
-            "$ref": "entity-extension-end"
-          }
-        ],
-        "ownedEnd": {
-          "$ref": "entity-extension-end"
-        }
-      }
-    },
-    {
-      "id": "entity-extension-base",
-      "kind": "uml.attribute",
-      "name": "base_Class",
-      "properties": {
-        "type": {
-          "$ref": "metaclass"
-        },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "entity-extension-end",
-      "kind": "uml.extension_end",
-      "name": "extension_entity",
-      "properties": {
-        "type": {
-          "$ref": "entity"
-        },
-        "aggregation": "composite",
-        "multiplicity": "0..1"
-      }
-    }
-  ],
-  "relations": [
-    {
-      "id": "owns-profile",
-      "kind": "owns",
-      "from": "root",
-      "to": "profile",
-      "properties": {}
-    },
-    {
-      "id": "owns-metamodel",
-      "kind": "owns",
-      "from": "root",
-      "to": "metamodel",
-      "properties": {}
-    },
-    {
-      "id": "owns-metaclass",
-      "kind": "owns",
-      "from": "metamodel",
-      "to": "metaclass",
-      "properties": {}
-    },
-    {
-      "id": "owns-local",
-      "kind": "owns",
-      "from": "profile",
-      "to": "local",
-      "properties": {}
-    },
-    {
-      "id": "class-import",
-      "kind": "uml.element_import",
-      "from": "profile",
-      "to": "metaclass",
-      "properties": {}
-    },
-    {
-      "id": "owns-class-import",
-      "kind": "owns",
-      "from": "profile",
-      "to": "class-import",
-      "properties": {}
-    },
-    {
-      "id": "owns-service",
-      "kind": "owns",
-      "from": "profile",
-      "to": "service",
-      "properties": {}
-    },
-    {
-      "id": "owns-entity",
-      "kind": "owns",
-      "from": "profile",
-      "to": "entity",
-      "properties": {}
-    },
-    {
-      "id": "owns-string",
-      "kind": "owns",
-      "from": "root",
-      "to": "string",
-      "properties": {}
-    },
-    {
-      "id": "owns-service-name",
-      "kind": "owns",
-      "from": "service",
-      "to": "service-name",
-      "properties": {}
-    },
-    {
-      "id": "owns-service-extension",
-      "kind": "owns",
-      "from": "profile",
-      "to": "service-extension",
-      "properties": {}
-    },
-    {
-      "id": "owns-service-extension-base",
-      "kind": "owns",
-      "from": "service",
-      "to": "service-extension-base",
-      "properties": {}
-    },
-    {
-      "id": "owns-service-extension-end",
-      "kind": "owns",
-      "from": "service-extension",
-      "to": "service-extension-end",
-      "properties": {}
-    },
-    {
-      "id": "owns-entity-extension",
-      "kind": "owns",
-      "from": "profile",
-      "to": "entity-extension",
-      "properties": {}
-    },
-    {
-      "id": "owns-entity-extension-base",
-      "kind": "owns",
-      "from": "entity",
-      "to": "entity-extension-base",
-      "properties": {}
-    },
-    {
-      "id": "owns-entity-extension-end",
-      "kind": "owns",
-      "from": "entity-extension",
-      "to": "entity-extension-end",
-      "properties": {}
-    },
-    {
-      "id": "invalid-specialization",
-      "kind": "uml.generalization",
-      "from": "local",
-      "to": "metaclass",
-      "properties": {}
-    }
-  ],
-  "diagrams": [
-    {
-      "id": "diagram",
-      "name": "Service architecture profile",
-      "uml_di_type": "UMLProfileDiagram",
-      "width": 1240,
-      "height": 800,
-      "model_elements": [],
-      "views": [
-        {
-          "id": "view-profile",
-          "subject": "profile",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-metaclass",
-          "subject": "metaclass",
-          "geometry": {
-            "kind": "rect",
-            "x": 325,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-service",
-          "subject": "service",
-          "geometry": {
-            "kind": "rect",
-            "x": 610,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-entity",
-          "subject": "entity",
-          "geometry": {
-            "kind": "rect",
-            "x": 895,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-service-extension",
-          "subject": "service-extension",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-entity-extension",
-          "subject": "entity-extension",
-          "geometry": {
-            "kind": "rect",
-            "x": 325,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-local",
-          "subject": "local",
-          "geometry": {
-            "kind": "rect",
-            "x": 610,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-class-import",
-          "subject": "class-import",
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 280,
-              "y": 105
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 325,
-                  "y": 105
-                }
-              }
-            ]
-          },
-          "endpoints": {
-            "source_view_id": "view-profile",
-            "target_view_id": "view-metaclass"
-          },
-          "z_index": 1
-        }
-      ]
-    }
-  ]
+    ]
+  }
 }

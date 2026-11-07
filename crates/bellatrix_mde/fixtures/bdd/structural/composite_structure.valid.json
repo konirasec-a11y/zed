@@ -1,288 +1,729 @@
 {
-  "schema_version": 1,
+  "schemaVersion": 2,
   "id": "composite_structure-project",
   "name": "Checkout internal collaboration",
-  "root_model": "root",
-  "elements": [
-    {
-      "id": "root",
-      "kind": "uml.model",
-      "name": "Checkout internal collaboration",
-      "properties": {}
-    },
-    {
-      "id": "system",
-      "kind": "uml.class",
-      "name": "CheckoutSystem",
-      "properties": {}
-    },
-    {
-      "id": "worker",
-      "kind": "uml.class",
-      "name": "Worker",
-      "properties": {}
-    },
-    {
-      "id": "storage",
-      "kind": "uml.class",
-      "name": "Storage",
-      "properties": {}
-    },
-    {
-      "id": "foreign",
-      "kind": "uml.class",
-      "name": "ExternalSystem",
-      "properties": {}
-    },
-    {
-      "id": "worker-part",
-      "kind": "uml.attribute",
-      "name": "worker",
-      "properties": {
-        "type": {
-          "$ref": "worker"
+  "model": {
+    "registry": {
+      "entries": {
+        "api": {
+          "id": "api",
+          "type": "Interface",
+          "data": {
+            "id": "api",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "CheckoutAPI",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedOperation": [],
+            "nestedClassifier": [],
+            "redefinedInterface": [],
+            "ownedReception": [],
+            "protocol": null
+          }
         },
-        "aggregation": "composite",
-        "multiplicity": "1"
+        "connector": {
+          "id": "connector",
+          "type": "Connector",
+          "data": {
+            "id": "connector",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "persistence",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": null,
+            "redefinedConnector": [],
+            "end": [
+              "worker-end",
+              "storage-end"
+            ],
+            "kind": null,
+            "contract": []
+          }
+        },
+        "foreign": {
+          "id": "foreign",
+          "type": "Class",
+          "data": {
+            "id": "foreign",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "ExternalSystem",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "foreign-part"
+            ],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "foreign-part": {
+          "id": "foreign-part",
+          "type": "Property",
+          "data": {
+            "id": "foreign-part",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "external",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "storage",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "foreign-part-upperValue-value",
+            "lowerValue": "foreign-part-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "foreign-part-lowerValue-value": {
+          "id": "foreign-part-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "foreign-part-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "foreign-part-upperValue-value": {
+          "id": "foreign-part-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "foreign-part-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "public-port": {
+          "id": "public-port",
+          "type": "Port",
+          "data": {
+            "id": "public-port",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "checkout",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "api",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "public-port-upperValue-value",
+            "lowerValue": "public-port-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "Composite",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null,
+            "isBehavior": "false",
+            "isService": "true",
+            "redefinedPort": [],
+            "protocol": null
+          }
+        },
+        "public-port-lowerValue-value": {
+          "id": "public-port-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "public-port-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "public-port-upperValue-value": {
+          "id": "public-port-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "public-port-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "root": {
+          "id": "root",
+          "type": "Model",
+          "data": {
+            "id": "root",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Checkout internal collaboration",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "system",
+              "worker",
+              "storage",
+              "foreign",
+              "api"
+            ],
+            "profileApplication": [],
+            "viewpoint": null
+          }
+        },
+        "storage": {
+          "id": "storage",
+          "type": "Class",
+          "data": {
+            "id": "storage",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Storage",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "storage-end": {
+          "id": "storage-end",
+          "type": "ConnectorEnd",
+          "data": {
+            "id": "storage-end",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "storage-end-upperValue-value",
+            "lowerValue": "storage-end-lowerValue-value",
+            "partWithPort": null,
+            "role": "storage-part"
+          }
+        },
+        "storage-end-lowerValue-value": {
+          "id": "storage-end-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "storage-end-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "storage-end-upperValue-value": {
+          "id": "storage-end-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "storage-end-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "storage-part": {
+          "id": "storage-part",
+          "type": "Property",
+          "data": {
+            "id": "storage-part",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "storage",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "storage",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "storage-part-upperValue-value",
+            "lowerValue": "storage-part-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "Composite",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "storage-part-lowerValue-value": {
+          "id": "storage-part-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "storage-part-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "storage-part-upperValue-value": {
+          "id": "storage-part-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "storage-part-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "system": {
+          "id": "system",
+          "type": "Class",
+          "data": {
+            "id": "system",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "CheckoutSystem",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [
+              "worker-part",
+              "storage-part",
+              "public-port"
+            ],
+            "ownedConnector": [
+              "connector"
+            ],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "worker": {
+          "id": "worker",
+          "type": "Class",
+          "data": {
+            "id": "worker",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Worker",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        },
+        "worker-end": {
+          "id": "worker-end",
+          "type": "ConnectorEnd",
+          "data": {
+            "id": "worker-end",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "worker-end-upperValue-value",
+            "lowerValue": "worker-end-lowerValue-value",
+            "partWithPort": null,
+            "role": "worker-part"
+          }
+        },
+        "worker-end-lowerValue-value": {
+          "id": "worker-end-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "worker-end-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "worker-end-upperValue-value": {
+          "id": "worker-end-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "worker-end-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "worker-part": {
+          "id": "worker-part",
+          "type": "Property",
+          "data": {
+            "id": "worker-part",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "worker",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "worker",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": "worker-part-upperValue-value",
+            "lowerValue": "worker-part-lowerValue-value",
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "Composite",
+            "redefinedProperty": [],
+            "owningAssociation": null,
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "worker-part-lowerValue-value": {
+          "id": "worker-part-lowerValue-value",
+          "type": "LiteralInteger",
+          "data": {
+            "id": "worker-part-lowerValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        },
+        "worker-part-upperValue-value": {
+          "id": "worker-part-upperValue-value",
+          "type": "LiteralUnlimitedNatural",
+          "data": {
+            "id": "worker-part-upperValue-value",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": null,
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "type": null,
+            "value": "1"
+          }
+        }
       }
     },
-    {
-      "id": "storage-part",
-      "kind": "uml.attribute",
-      "name": "storage",
-      "properties": {
-        "type": {
-          "$ref": "storage"
-        },
-        "aggregation": "composite",
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "foreign-part",
-      "kind": "uml.attribute",
-      "name": "external",
-      "properties": {
-        "type": {
-          "$ref": "storage"
-        },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "connector",
-      "kind": "uml.connector",
-      "name": "persistence",
-      "properties": {
-        "end": [
+    "rootModel": "root",
+    "diagrams": [
+      {
+        "id": "diagram",
+        "name": "Checkout internal collaboration",
+        "uml_di_type": "UMLCompositeStructureDiagram",
+        "width": 1240,
+        "height": 800,
+        "model_elements": [
+          "system"
+        ],
+        "views": [
           {
-            "$ref": "worker-end"
+            "id": "view-system",
+            "subject": "system",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
           },
           {
-            "$ref": "storage-end"
+            "id": "view-worker-part",
+            "subject": "worker-part",
+            "geometry": {
+              "kind": "rect",
+              "x": 325,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-storage-part",
+            "subject": "storage-part",
+            "geometry": {
+              "kind": "rect",
+              "x": 610,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-public-port",
+            "subject": "public-port",
+            "geometry": {
+              "kind": "rect",
+              "x": 895,
+              "y": 40,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
+          },
+          {
+            "id": "view-connector",
+            "subject": "connector",
+            "geometry": {
+              "kind": "rect",
+              "x": 40,
+              "y": 220,
+              "width": 240,
+              "height": 130
+            },
+            "z_index": 2
           }
         ]
       }
-    },
-    {
-      "id": "worker-end",
-      "kind": "uml.connector_end",
-      "name": "",
-      "properties": {
-        "role": {
-          "$ref": "worker-part"
-        },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "storage-end",
-      "kind": "uml.connector_end",
-      "name": "",
-      "properties": {
-        "role": {
-          "$ref": "storage-part"
-        },
-        "multiplicity": "1"
-      }
-    },
-    {
-      "id": "api",
-      "kind": "uml.interface",
-      "name": "CheckoutAPI",
-      "properties": {}
-    },
-    {
-      "id": "public-port",
-      "kind": "uml.port",
-      "name": "checkout",
-      "properties": {
-        "type": {
-          "$ref": "api"
-        },
-        "aggregation": "composite",
-        "multiplicity": "1"
-      }
-    }
-  ],
-  "relations": [
-    {
-      "id": "owns-system",
-      "kind": "owns",
-      "from": "root",
-      "to": "system",
-      "properties": {}
-    },
-    {
-      "id": "owns-worker",
-      "kind": "owns",
-      "from": "root",
-      "to": "worker",
-      "properties": {}
-    },
-    {
-      "id": "owns-storage",
-      "kind": "owns",
-      "from": "root",
-      "to": "storage",
-      "properties": {}
-    },
-    {
-      "id": "owns-foreign",
-      "kind": "owns",
-      "from": "root",
-      "to": "foreign",
-      "properties": {}
-    },
-    {
-      "id": "owns-worker-part",
-      "kind": "owns",
-      "from": "system",
-      "to": "worker-part",
-      "properties": {}
-    },
-    {
-      "id": "owns-storage-part",
-      "kind": "owns",
-      "from": "system",
-      "to": "storage-part",
-      "properties": {}
-    },
-    {
-      "id": "owns-foreign-part",
-      "kind": "owns",
-      "from": "foreign",
-      "to": "foreign-part",
-      "properties": {}
-    },
-    {
-      "id": "owns-connector",
-      "kind": "owns",
-      "from": "system",
-      "to": "connector",
-      "properties": {}
-    },
-    {
-      "id": "owns-worker-end",
-      "kind": "owns",
-      "from": "connector",
-      "to": "worker-end",
-      "properties": {}
-    },
-    {
-      "id": "owns-storage-end",
-      "kind": "owns",
-      "from": "connector",
-      "to": "storage-end",
-      "properties": {}
-    },
-    {
-      "id": "owns-api",
-      "kind": "owns",
-      "from": "root",
-      "to": "api",
-      "properties": {}
-    },
-    {
-      "id": "owns-public-port",
-      "kind": "owns",
-      "from": "system",
-      "to": "public-port",
-      "properties": {}
-    }
-  ],
-  "diagrams": [
-    {
-      "id": "diagram",
-      "name": "Checkout internal collaboration",
-      "uml_di_type": "UMLCompositeStructureDiagram",
-      "width": 1240,
-      "height": 800,
-      "model_elements": [
-        "system"
-      ],
-      "views": [
-        {
-          "id": "view-system",
-          "subject": "system",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-worker-part",
-          "subject": "worker-part",
-          "geometry": {
-            "kind": "rect",
-            "x": 325,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-storage-part",
-          "subject": "storage-part",
-          "geometry": {
-            "kind": "rect",
-            "x": 610,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-public-port",
-          "subject": "public-port",
-          "geometry": {
-            "kind": "rect",
-            "x": 895,
-            "y": 40,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        },
-        {
-          "id": "view-connector",
-          "subject": "connector",
-          "geometry": {
-            "kind": "rect",
-            "x": 40,
-            "y": 220,
-            "width": 240,
-            "height": 130
-          },
-          "z_index": 2
-        }
-      ]
-    }
-  ]
+    ]
+  }
 }

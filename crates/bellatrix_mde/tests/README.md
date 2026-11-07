@@ -1,17 +1,26 @@
-# Existing workflow tests
+# BDD workflow requirements
 
-The standalone UML kernel validation stage has been removed. Tests dedicated to
-its diagnostics, aggregate verdicts and validation-only mutation gates have been
-removed with it. Mixed scenarios retain their existing command, query, Inspector,
-MDJ interchange and persistence assertions where those checks are independent of
-that stage. No replacement UML certification or placeholder validator is used.
+The `.feature` files preserve the document, native authoring and StarUML
+interchange requirements. Their Rust integration harnesses exercise complete
+flows through public APIs, including editing, writing files, closing and
+reopening. They are not unit tests or a general Gherkin interpreter.
 
-The remaining suites cover existing document, editing, presentation, query and
-generation workflows. The feature files describe the surviving BDD scenarios;
-they are documentation, not an interpreted Gherkin runner. Existing Cordis
-workflows remain in `../../bellatrix_mde_cordis/tests/`.
+Native documents use schema version 2 and the typed `ruml::Registry` contract.
+Bellatrix schema version 1 fixtures and their old BDD implementation are not
+supported by these flows. StarUML `.mdj` inputs remain external interchange
+documents and are imported through the public MDJ API.
 
-This cleanup adds no scenarios or unit tests. It does not establish a runtime
-pass: compilation and test execution were not run as part of this change.
-Further migration of fixtures and legacy internal test imports to the ruml
-contract is separate from removal of the deleted validation APIs.
+The diagram examples retain their historical `valid`/`invalid` names as
+identifiers. They verify persistence, not UML certification or diagnostics from
+the removed validation stage. Cordis editing and save requirements are in
+`../../bellatrix_mde_cordis/tests/features/`.
+
+Eight diagram examples remain explicitly pending because their original data
+cannot be represented by the current typed contracts. Their manifests retain
+the reasons, but no replacement fixtures pretend to provide equivalent
+coverage. The integration harness marks them ignored and returns an explicit
+error if they are forced with `--ignored`; they must not be counted as passed.
+
+Commit and push before running the five BDD integration targets selected by
+`script/bellatrix_mde/smoke.ps1`. Passing a source check or compiling the crates
+does not establish that these workflows pass at runtime.

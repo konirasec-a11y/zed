@@ -1,595 +1,894 @@
 {
-  "schema_version": 1,
+  "schemaVersion": 2,
   "id": "use_case-project",
   "name": "Use Case",
-  "root_model": "root",
-  "elements": [
-    {
-      "id": "root",
-      "kind": "uml.model",
-      "name": "Behavioral acceptance corpus",
-      "properties": {}
-    },
-    {
-      "id": "customer",
-      "kind": "uml.actor",
-      "name": "Customer",
-      "properties": {}
-    },
-    {
-      "id": "member",
-      "kind": "uml.actor",
-      "name": "Registered customer",
-      "properties": {}
-    },
-    {
-      "id": "gateway",
-      "kind": "uml.actor",
-      "name": "Payment gateway",
-      "properties": {}
-    },
-    {
-      "id": "shop",
-      "kind": "uml.class",
-      "name": "Online shop",
-      "properties": {}
-    },
-    {
-      "id": "checkout",
-      "kind": "uml.use_case",
-      "name": "Complete checkout",
-      "properties": {
-        "subject": [
-          {
-            "$ref": "shop"
+  "model": {
+    "registry": {
+      "entries": {
+        "checkout": {
+          "id": "checkout",
+          "type": "UseCase",
+          "data": {
+            "id": "checkout",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Complete checkout",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "include": [
+              "checkout-payment",
+              "checkout-receipt"
+            ],
+            "extend": [],
+            "extensionPoint": [
+              "loyalty-point"
+            ],
+            "subject": [
+              "shop"
+            ]
           }
-        ],
-        "extensionPoint": [
+        },
+        "checkout-payment": {
+          "id": "checkout-payment",
+          "type": "Include",
+          "data": {
+            "id": "checkout-payment",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Checkout payment",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "includingCase": "checkout",
+            "addition": "payment"
+          }
+        },
+        "checkout-receipt": {
+          "id": "checkout-receipt",
+          "type": "Include",
+          "data": {
+            "id": "checkout-receipt",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Checkout receipt",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "includingCase": "checkout",
+            "addition": "receipt"
+          }
+        },
+        "customer": {
+          "id": "customer",
+          "type": "Actor",
+          "data": {
+            "id": "customer",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": []
+          }
+        },
+        "customer-checkout": {
+          "id": "customer-checkout",
+          "type": "Association",
+          "data": {
+            "id": "customer-checkout",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Customer checkout",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedEnd": [
+              "customer-checkout-actor",
+              "customer-checkout-case"
+            ],
+            "memberEnd": [
+              "customer-checkout-actor",
+              "customer-checkout-case"
+            ],
+            "isDerived": "false",
+            "navigableOwnedEnd": []
+          }
+        },
+        "customer-checkout-actor": {
+          "id": "customer-checkout-actor",
+          "type": "Property",
+          "data": {
+            "id": "customer-checkout-actor",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "customer",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": null,
+            "lowerValue": null,
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": "customer-checkout",
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "customer-checkout-case": {
+          "id": "customer-checkout-case",
+          "type": "Property",
+          "data": {
+            "id": "customer-checkout-case",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "checkout",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "checkout",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": null,
+            "lowerValue": null,
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": "customer-checkout",
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "discount": {
+          "id": "discount",
+          "type": "UseCase",
+          "data": {
+            "id": "discount",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Apply loyalty discount",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "include": [],
+            "extend": [
+              "discount-extension"
+            ],
+            "extensionPoint": [],
+            "subject": [
+              "shop"
+            ]
+          }
+        },
+        "discount-extension": {
+          "id": "discount-extension",
+          "type": "Extend",
+          "data": {
+            "id": "discount-extension",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Discount extension",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "condition": null,
+            "extensionLocation": [
+              "loyalty-point"
+            ],
+            "extension": "discount",
+            "extendedCase": "checkout"
+          }
+        },
+        "gateway": {
+          "id": "gateway",
+          "type": "Actor",
+          "data": {
+            "id": "gateway",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Payment gateway",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": []
+          }
+        },
+        "gateway-payment": {
+          "id": "gateway-payment",
+          "type": "Association",
+          "data": {
+            "id": "gateway-payment",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Gateway payment",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedEnd": [
+              "gateway-payment-actor",
+              "gateway-payment-case"
+            ],
+            "memberEnd": [
+              "gateway-payment-actor",
+              "gateway-payment-case"
+            ],
+            "isDerived": "false",
+            "navigableOwnedEnd": []
+          }
+        },
+        "gateway-payment-actor": {
+          "id": "gateway-payment-actor",
+          "type": "Property",
+          "data": {
+            "id": "gateway-payment-actor",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "gateway",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "gateway",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": null,
+            "lowerValue": null,
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": "gateway-payment",
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "gateway-payment-case": {
+          "id": "gateway-payment-case",
+          "type": "Property",
+          "data": {
+            "id": "gateway-payment-case",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "payment",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "isStatic": "false",
+            "type": "payment",
+            "isOrdered": "false",
+            "isUnique": "true",
+            "upperValue": null,
+            "lowerValue": null,
+            "isReadOnly": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "deployment": [],
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "datatype": null,
+            "isDerived": "false",
+            "isDerivedUnion": "false",
+            "aggregation": "None",
+            "redefinedProperty": [],
+            "owningAssociation": "gateway-payment",
+            "defaultValue": null,
+            "subsettedProperty": [],
+            "association": null,
+            "qualifier": [],
+            "associationEnd": null
+          }
+        },
+        "loyalty-point": {
+          "id": "loyalty-point",
+          "type": "ExtensionPoint",
+          "data": {
+            "id": "loyalty-point",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Before total calculation",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "isLeaf": "false",
+            "useCase": "checkout"
+          }
+        },
+        "member": {
+          "id": "member",
+          "type": "Actor",
+          "data": {
+            "id": "member",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Registered customer",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": []
+          }
+        },
+        "member-generalization": {
+          "id": "member-generalization",
+          "type": "Generalization",
+          "data": {
+            "id": "member-generalization",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "isSubstitutable": null,
+            "generalizationSet": [],
+            "specific": "member",
+            "general": "customer"
+          }
+        },
+        "payment": {
+          "id": "payment",
+          "type": "UseCase",
+          "data": {
+            "id": "payment",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Authorize payment",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "include": [],
+            "extend": [],
+            "extensionPoint": [],
+            "subject": [
+              "shop"
+            ]
+          }
+        },
+        "receipt": {
+          "id": "receipt",
+          "type": "UseCase",
+          "data": {
+            "id": "receipt",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Issue receipt",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "include": [],
+            "extend": [],
+            "extensionPoint": [],
+            "subject": [
+              "shop"
+            ]
+          }
+        },
+        "root": {
+          "id": "root",
+          "type": "Model",
+          "data": {
+            "id": "root",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Behavioral acceptance corpus",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "packageMerge": [],
+            "packagedElement": [
+              "customer",
+              "member",
+              "gateway",
+              "shop",
+              "checkout",
+              "payment",
+              "discount",
+              "receipt",
+              "customer-checkout",
+              "gateway-payment"
+            ],
+            "profileApplication": [],
+            "viewpoint": null
+          }
+        },
+        "shop": {
+          "id": "shop",
+          "type": "Class",
+          "data": {
+            "id": "shop",
+            "eAnnotations": [],
+            "ownedComment": [],
+            "name": "Online shop",
+            "visibility": null,
+            "clientDependency": [],
+            "nameExpression": null,
+            "elementImport": [],
+            "packageImport": [],
+            "ownedRule": [],
+            "isLeaf": "false",
+            "owningTemplateParameter": null,
+            "templateParameter": null,
+            "templateBinding": [],
+            "ownedTemplateSignature": null,
+            "isAbstract": "false",
+            "generalization": [],
+            "powertypeExtent": [],
+            "redefinedClassifier": [],
+            "substitution": [],
+            "representation": null,
+            "collaborationUse": [],
+            "ownedUseCase": [],
+            "useCase": [],
+            "ownedAttribute": [],
+            "ownedConnector": [],
+            "ownedBehavior": [],
+            "classifierBehavior": null,
+            "interfaceRealization": [],
+            "ownedTrigger": [],
+            "nestedClassifier": [],
+            "ownedOperation": [],
+            "isActive": "false",
+            "ownedReception": []
+          }
+        }
+      }
+    },
+    "rootModel": "root",
+    "diagrams": [
+      {
+        "id": "use_case-diagram",
+        "name": "Use Case",
+        "uml_di_type": "UMLUseCaseDiagram",
+        "width": 1800,
+        "height": 1200,
+        "model_elements": [],
+        "views": [
           {
-            "$ref": "loyalty-point"
+            "id": "view-customer",
+            "subject": "customer",
+            "geometry": {
+              "kind": "rect",
+              "x": 80,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-member",
+            "subject": "member",
+            "geometry": {
+              "kind": "rect",
+              "x": 400,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-gateway",
+            "subject": "gateway",
+            "geometry": {
+              "kind": "rect",
+              "x": 720,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-checkout",
+            "subject": "checkout",
+            "geometry": {
+              "kind": "rect",
+              "x": 1040,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-payment",
+            "subject": "payment",
+            "geometry": {
+              "kind": "rect",
+              "x": 1360,
+              "y": 80,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-discount",
+            "subject": "discount",
+            "geometry": {
+              "kind": "rect",
+              "x": 80,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-receipt",
+            "subject": "receipt",
+            "geometry": {
+              "kind": "rect",
+              "x": 400,
+              "y": 260,
+              "width": 220,
+              "height": 100
+            }
+          },
+          {
+            "id": "view-member-generalization",
+            "subject": "member-generalization",
+            "endpoints": {
+              "source_view_id": "view-member",
+              "target_view_id": "view-customer"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 620,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 80,
+                    "y": 130
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-checkout-payment",
+            "subject": "checkout-payment",
+            "endpoints": {
+              "source_view_id": "view-checkout",
+              "target_view_id": "view-payment"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1260,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1360,
+                    "y": 130
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-checkout-receipt",
+            "subject": "checkout-receipt",
+            "endpoints": {
+              "source_view_id": "view-checkout",
+              "target_view_id": "view-receipt"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 1260,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 400,
+                    "y": 310
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-discount-extension",
+            "subject": "discount-extension",
+            "endpoints": {
+              "source_view_id": "view-discount",
+              "target_view_id": "view-checkout"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 300,
+                "y": 310
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1040,
+                    "y": 130
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-customer-checkout",
+            "subject": "customer-checkout",
+            "endpoints": {
+              "source_view_id": "view-customer",
+              "target_view_id": "view-checkout"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 300,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1040,
+                    "y": 130
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "view-gateway-payment",
+            "subject": "gateway-payment",
+            "endpoints": {
+              "source_view_id": "view-gateway",
+              "target_view_id": "view-payment"
+            },
+            "geometry": {
+              "kind": "path",
+              "start": {
+                "x": 940,
+                "y": 130
+              },
+              "segments": [
+                {
+                  "kind": "line",
+                  "to": {
+                    "x": 1360,
+                    "y": 130
+                  }
+                }
+              ]
+            }
           }
         ]
       }
-    },
-    {
-      "id": "payment",
-      "kind": "uml.use_case",
-      "name": "Authorize payment",
-      "properties": {
-        "subject": [
-          {
-            "$ref": "shop"
-          }
-        ]
-      }
-    },
-    {
-      "id": "discount",
-      "kind": "uml.use_case",
-      "name": "Apply loyalty discount",
-      "properties": {
-        "subject": [
-          {
-            "$ref": "shop"
-          }
-        ]
-      }
-    },
-    {
-      "id": "receipt",
-      "kind": "uml.use_case",
-      "name": "Issue receipt",
-      "properties": {
-        "subject": [
-          {
-            "$ref": "shop"
-          }
-        ]
-      }
-    },
-    {
-      "id": "loyalty-point",
-      "kind": "uml.extension_point",
-      "name": "Before total calculation",
-      "properties": {
-        "useCase": {
-          "$ref": "checkout"
-        }
-      }
-    },
-    {
-      "id": "customer-checkout-actor",
-      "kind": "uml.property",
-      "name": "customer",
-      "properties": {
-        "type": {
-          "$ref": "customer"
-        }
-      }
-    },
-    {
-      "id": "customer-checkout-case",
-      "kind": "uml.property",
-      "name": "checkout",
-      "properties": {
-        "type": {
-          "$ref": "checkout"
-        }
-      }
-    },
-    {
-      "id": "gateway-payment-actor",
-      "kind": "uml.property",
-      "name": "gateway",
-      "properties": {
-        "type": {
-          "$ref": "gateway"
-        }
-      }
-    },
-    {
-      "id": "gateway-payment-case",
-      "kind": "uml.property",
-      "name": "payment",
-      "properties": {
-        "type": {
-          "$ref": "payment"
-        }
-      }
-    }
-  ],
-  "relations": [
-    {
-      "id": "owns-customer",
-      "kind": "owns",
-      "from": "root",
-      "to": "customer"
-    },
-    {
-      "id": "owns-member",
-      "kind": "owns",
-      "from": "root",
-      "to": "member"
-    },
-    {
-      "id": "owns-gateway",
-      "kind": "owns",
-      "from": "root",
-      "to": "gateway"
-    },
-    {
-      "id": "owns-shop",
-      "kind": "owns",
-      "from": "root",
-      "to": "shop"
-    },
-    {
-      "id": "owns-checkout",
-      "kind": "owns",
-      "from": "root",
-      "to": "checkout"
-    },
-    {
-      "id": "owns-payment",
-      "kind": "owns",
-      "from": "root",
-      "to": "payment"
-    },
-    {
-      "id": "owns-discount",
-      "kind": "owns",
-      "from": "root",
-      "to": "discount"
-    },
-    {
-      "id": "owns-receipt",
-      "kind": "owns",
-      "from": "root",
-      "to": "receipt"
-    },
-    {
-      "id": "owns-loyalty-point",
-      "kind": "owns",
-      "from": "checkout",
-      "to": "loyalty-point"
-    },
-    {
-      "id": "member-generalization",
-      "kind": "uml.generalization",
-      "from": "member",
-      "to": "customer",
-      "properties": {}
-    },
-    {
-      "id": "checkout-payment",
-      "kind": "uml.include",
-      "from": "checkout",
-      "to": "payment",
-      "properties": {
-        "includingCase": {
-          "$ref": "checkout"
-        },
-        "addition": {
-          "$ref": "payment"
-        },
-        "name": "Checkout payment"
-      }
-    },
-    {
-      "id": "owns-checkout-payment",
-      "kind": "owns",
-      "from": "checkout",
-      "to": "checkout-payment"
-    },
-    {
-      "id": "checkout-receipt",
-      "kind": "uml.include",
-      "from": "checkout",
-      "to": "receipt",
-      "properties": {
-        "includingCase": {
-          "$ref": "checkout"
-        },
-        "addition": {
-          "$ref": "receipt"
-        },
-        "name": "Checkout receipt"
-      }
-    },
-    {
-      "id": "owns-checkout-receipt",
-      "kind": "owns",
-      "from": "checkout",
-      "to": "checkout-receipt"
-    },
-    {
-      "id": "discount-extension",
-      "kind": "uml.extend",
-      "from": "discount",
-      "to": "checkout",
-      "properties": {
-        "extension": {
-          "$ref": "discount"
-        },
-        "extendedCase": {
-          "$ref": "checkout"
-        },
-        "extensionLocation": [
-          {
-            "$ref": "loyalty-point"
-          }
-        ],
-        "name": "Discount extension"
-      }
-    },
-    {
-      "id": "owns-discount-extension",
-      "kind": "owns",
-      "from": "discount",
-      "to": "discount-extension"
-    },
-    {
-      "id": "customer-checkout",
-      "kind": "uml.association",
-      "from": "customer",
-      "to": "checkout",
-      "properties": {
-        "memberEnd": [
-          {
-            "$ref": "customer-checkout-actor"
-          },
-          {
-            "$ref": "customer-checkout-case"
-          }
-        ],
-        "ownedEnd": [
-          {
-            "$ref": "customer-checkout-actor"
-          },
-          {
-            "$ref": "customer-checkout-case"
-          }
-        ],
-        "name": "Customer checkout",
-        "sourceRole": "customer",
-        "targetRole": "checkout"
-      }
-    },
-    {
-      "id": "owns-customer-checkout",
-      "kind": "owns",
-      "from": "root",
-      "to": "customer-checkout"
-    },
-    {
-      "id": "owns-customer-checkout-actor",
-      "kind": "owns",
-      "from": "customer-checkout",
-      "to": "customer-checkout-actor"
-    },
-    {
-      "id": "owns-customer-checkout-case",
-      "kind": "owns",
-      "from": "customer-checkout",
-      "to": "customer-checkout-case"
-    },
-    {
-      "id": "gateway-payment",
-      "kind": "uml.association",
-      "from": "gateway",
-      "to": "payment",
-      "properties": {
-        "memberEnd": [
-          {
-            "$ref": "gateway-payment-actor"
-          },
-          {
-            "$ref": "gateway-payment-case"
-          }
-        ],
-        "ownedEnd": [
-          {
-            "$ref": "gateway-payment-actor"
-          },
-          {
-            "$ref": "gateway-payment-case"
-          }
-        ],
-        "name": "Gateway payment",
-        "sourceRole": "gateway",
-        "targetRole": "payment"
-      }
-    },
-    {
-      "id": "owns-gateway-payment",
-      "kind": "owns",
-      "from": "root",
-      "to": "gateway-payment"
-    },
-    {
-      "id": "owns-gateway-payment-actor",
-      "kind": "owns",
-      "from": "gateway-payment",
-      "to": "gateway-payment-actor"
-    },
-    {
-      "id": "owns-gateway-payment-case",
-      "kind": "owns",
-      "from": "gateway-payment",
-      "to": "gateway-payment-case"
-    }
-  ],
-  "diagrams": [
-    {
-      "id": "use_case-diagram",
-      "name": "Use Case",
-      "uml_di_type": "UMLUseCaseDiagram",
-      "width": 1800,
-      "height": 1200,
-      "model_elements": [],
-      "views": [
-        {
-          "id": "view-customer",
-          "subject": "customer",
-          "geometry": {
-            "kind": "rect",
-            "x": 80,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-member",
-          "subject": "member",
-          "geometry": {
-            "kind": "rect",
-            "x": 400,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-gateway",
-          "subject": "gateway",
-          "geometry": {
-            "kind": "rect",
-            "x": 720,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-checkout",
-          "subject": "checkout",
-          "geometry": {
-            "kind": "rect",
-            "x": 1040,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-payment",
-          "subject": "payment",
-          "geometry": {
-            "kind": "rect",
-            "x": 1360,
-            "y": 80,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-discount",
-          "subject": "discount",
-          "geometry": {
-            "kind": "rect",
-            "x": 80,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-receipt",
-          "subject": "receipt",
-          "geometry": {
-            "kind": "rect",
-            "x": 400,
-            "y": 260,
-            "width": 220,
-            "height": 100
-          }
-        },
-        {
-          "id": "view-member-generalization",
-          "subject": "member-generalization",
-          "endpoints": {
-            "source_view_id": "view-member",
-            "target_view_id": "view-customer"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 620,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 80,
-                  "y": 130
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-checkout-payment",
-          "subject": "checkout-payment",
-          "endpoints": {
-            "source_view_id": "view-checkout",
-            "target_view_id": "view-payment"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1260,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1360,
-                  "y": 130
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-checkout-receipt",
-          "subject": "checkout-receipt",
-          "endpoints": {
-            "source_view_id": "view-checkout",
-            "target_view_id": "view-receipt"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 1260,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 400,
-                  "y": 310
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-discount-extension",
-          "subject": "discount-extension",
-          "endpoints": {
-            "source_view_id": "view-discount",
-            "target_view_id": "view-checkout"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 300,
-              "y": 310
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1040,
-                  "y": 130
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-customer-checkout",
-          "subject": "customer-checkout",
-          "endpoints": {
-            "source_view_id": "view-customer",
-            "target_view_id": "view-checkout"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 300,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1040,
-                  "y": 130
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "view-gateway-payment",
-          "subject": "gateway-payment",
-          "endpoints": {
-            "source_view_id": "view-gateway",
-            "target_view_id": "view-payment"
-          },
-          "geometry": {
-            "kind": "path",
-            "start": {
-              "x": 940,
-              "y": 130
-            },
-            "segments": [
-              {
-                "kind": "line",
-                "to": {
-                  "x": 1360,
-                  "y": 130
-                }
-              }
-            ]
-          }
-        }
-      ]
-    }
-  ]
+    ]
+  }
 }
