@@ -22,6 +22,26 @@ pub enum UmlLineSegment {
         to: (f32, f32),
     },
 }
+impl UmlLineSegment {
+    pub(crate) fn from_path_segment(
+        segment: &bellatrix_mde_cordis::PathSegment,
+        place: &impl Fn(bellatrix_mde_cordis::Point) -> (f32, f32),
+    ) -> Self {
+        match segment {
+            bellatrix_mde_cordis::PathSegment::Line { to } => Self::Line { to: place(*to) },
+            bellatrix_mde_cordis::PathSegment::Cubic {
+                control1,
+                control2,
+                to,
+            } => Self::Cubic {
+                control1: place(*control1),
+                control2: place(*control2),
+                to: place(*to),
+            },
+        }
+    }
+}
+
 #[derive(IntoElement)]
 pub struct UmlRelationGlyph {
     style: RelationshipStyle,

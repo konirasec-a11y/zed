@@ -1,4 +1,5 @@
 use crate::pages::mde_page::MdeWorkbenchItem;
+use crate::pages::mde_page::canvas_model_position;
 use crate::view_model::canvas_presentation;
 use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::ModelingTool;
@@ -388,4 +389,55 @@ impl MdeWorkbenchItem {
         };
         cx.notify();
     }
+}
+
+pub(crate) fn path_segment_at_position(
+    geometry: &Geometry,
+    position: bellatrix_mde_cordis::Point,
+    zoom: f32,
+) -> Option<PathHandle> {
+    canvas_presentation::path_segment_index_at_position(geometry, position, zoom)
+        .map(PathHandle::Segment)
+}
+
+pub(crate) fn relationship_hit_test(
+    geometry: &Geometry,
+    position: gpui::Point<gpui::Pixels>,
+    origin: Option<(f64, f64)>,
+    pan: (f32, f32),
+    zoom: f32,
+    node_bounds: &[[f32; 4]],
+) -> bool {
+    let Some(origin) = origin else {
+        return false;
+    };
+    if !zoom.is_finite() || zoom <= 0.0 {
+        return false;
+    }
+    let canvas_x = f64::from(position.x) - origin.0;
+    let canvas_y = f64::from(position.y) - origin.1;
+    // Preserve paint order, but never let a crossing relationship steal a node's click.
+    if node_bounds.iter().any(|[x, y, width, height]| {
+        canvas_x >= f64::from(*x)
+            && canvas_x <= f64::from(*x + *width)
+            && canvas_y >= f64::from(*y)
+            && canvas_y <= f64::from(*y + *height)
+    }) {
+        return false;
+    }
+    let Geometry::Path { .. } = geometry else {
+        return false;
+    };
+    let (x, y) = canvas_model_position(
+        (f64::from(position.x), f64::from(position.y)),
+        origin,
+        pan,
+        zoom,
+    );
+    canvas_presentation::path_segment_index_at_position(
+        geometry,
+        bellatrix_mde_cordis::Point { x, y },
+        zoom,
+    )
+    .is_some()
 }

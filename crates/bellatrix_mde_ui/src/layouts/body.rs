@@ -1,6 +1,8 @@
 use crate::assets::theme::WorkbenchPalette;
 use crate::components::canvas_interaction::CanvasGesture;
 use crate::components::canvas_interaction::PathHandle;
+use crate::components::canvas_interaction::path_segment_at_position;
+use crate::components::canvas_interaction::relationship_hit_test;
 use crate::components::quick_tools::quick_edit_for_element;
 use crate::elements::uml::UmlFigure;
 use crate::elements::uml::UmlLineSegment;
@@ -392,20 +394,7 @@ impl Render for MdeWorkbenchItem {
                                 }
                                 let local_segments = segments
                                     .iter()
-                                    .map(|segment| match segment {
-                                        PathSegment::Line { to } => {
-                                            UmlLineSegment::Line { to: place(*to) }
-                                        }
-                                        PathSegment::Cubic {
-                                            control1,
-                                            control2,
-                                            to,
-                                        } => UmlLineSegment::Cubic {
-                                            control1: place(*control1),
-                                            control2: place(*control2),
-                                            to: place(*to),
-                                        },
-                                    })
+                                    .map(|segment| UmlLineSegment::from_path_segment(segment, &place))
                                     .collect();
                                 let render_style = canvas_presentation::render_style(
                                     view,
@@ -1945,45 +1934,6 @@ impl MdeWorkbenchItem {
     }
 }
 
-pub(crate) fn path_segment_at_position(
-    geometry: &Geometry,
-    position: bellatrix_mde_cordis::Point,
-    zoom: f32,
-) -> Option<PathHandle> {
-    let Geometry::Path { start, segments } = geometry else {
-        return None;
-    };
-    let tolerance = 5.0 / f64::from(zoom);
-    let mut previous = *start;
-    for (index, segment) in segments.iter().enumerate() {
-        let (hit, end) = match segment {
-            PathSegment::Line { to } => (
-                relationship_segment_distance(position, previous, *to) <= tolerance,
-                *to,
-            ),
-            PathSegment::Cubic {
-                control1,
-                control2,
-                to,
-            } => (
-                relationship_cubic_hit(
-                    position,
-                    [previous, *control1, *control2, *to],
-                    tolerance,
-                    0.25 / f64::from(zoom),
-                    0,
-                ),
-                *to,
-            ),
-        };
-        if hit {
-            return Some(PathHandle::Segment(index));
-        }
-        previous = end;
-    }
-    None
-}
-
 fn path_handle_positions(geometry: &Geometry) -> Vec<(PathHandle, bellatrix_mde_cordis::Point)> {
     let Geometry::Path { start, segments } = geometry else {
         return Vec::new();
@@ -2146,155 +2096,6 @@ fn translate_path_vertex(segments: &mut [PathSegment], index: usize, dx: f64, dy
     if let Some(PathSegment::Cubic { control1, .. }) = segments.get_mut(index + 1) {
         translate(control1);
     }
-}
-
-pub(crate) fn relationship_hit_test(
-    geometry: &Geometry,
-    position: gpui::Point<gpui::Pixels>,
-    origin: Option<(f64, f64)>,
-    pan: (f32, f32),
-    zoom: f32,
-    node_bounds: &[[f32; 4]],
-) -> bool {
-    let Some(origin) = origin else {
-        return false;
-    };
-    if !zoom.is_finite() || zoom <= 0.0 {
-        return false;
-    }
-    let canvas_x = f64::from(position.x) - origin.0;
-    let canvas_y = f64::from(position.y) - origin.1;
-    // Preserve paint order, but never let a crossing relationship steal a node's click.
-    if node_bounds.iter().any(|[x, y, width, height]| {
-        canvas_x >= f64::from(*x)
-            && canvas_x <= f64::from(*x + *width)
-            && canvas_y >= f64::from(*y)
-            && canvas_y <= f64::from(*y + *height)
-    }) {
-        return false;
-    }
-    let Geometry::Path { start, segments } = geometry else {
-        return false;
-    };
-    let (x, y) = canvas_model_position(
-        (f64::from(position.x), f64::from(position.y)),
-        origin,
-        pan,
-        zoom,
-    );
-    let position = bellatrix_mde_cordis::Point { x, y };
-    // Keep the clickable stroke narrow at every zoom; control points are not painted edges.
-    let tolerance = 5.0 / f64::from(zoom);
-    let flatness = 0.25 / f64::from(zoom);
-    let mut previous = *start;
-    for segment in segments {
-        let (hit, end) = match segment {
-            PathSegment::Line { to } => (
-                relationship_segment_distance(position, previous, *to) <= tolerance,
-                *to,
-            ),
-            PathSegment::Cubic {
-                control1,
-                control2,
-                to,
-            } => (
-                relationship_cubic_hit(
-                    position,
-                    [previous, *control1, *control2, *to],
-                    tolerance,
-                    flatness,
-                    0,
-                ),
-                *to,
-            ),
-        };
-        if hit {
-            return true;
-        }
-        previous = end;
-    }
-    false
-}
-
-fn relationship_segment_distance(
-    position: bellatrix_mde_cordis::Point,
-    start: bellatrix_mde_cordis::Point,
-    end: bellatrix_mde_cordis::Point,
-) -> f64 {
-    let delta_x = end.x - start.x;
-    let delta_y = end.y - start.y;
-    let length_squared = delta_x * delta_x + delta_y * delta_y;
-    let projection = if length_squared > f64::EPSILON {
-        (((position.x - start.x) * delta_x + (position.y - start.y) * delta_y) / length_squared)
-            .clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    (position.x - start.x - projection * delta_x).hypot(position.y - start.y - projection * delta_y)
-}
-
-fn relationship_cubic_hit(
-    position: bellatrix_mde_cordis::Point,
-    points: [bellatrix_mde_cordis::Point; 4],
-    tolerance: f64,
-    flatness: f64,
-    depth: u8,
-) -> bool {
-    let [start, control1, control2, end] = points;
-    let min_x = points
-        .iter()
-        .map(|point| point.x)
-        .fold(f64::INFINITY, f64::min);
-    let max_x = points
-        .iter()
-        .map(|point| point.x)
-        .fold(f64::NEG_INFINITY, f64::max);
-    let min_y = points
-        .iter()
-        .map(|point| point.y)
-        .fold(f64::INFINITY, f64::min);
-    let max_y = points
-        .iter()
-        .map(|point| point.y)
-        .fold(f64::NEG_INFINITY, f64::max);
-    if position.x < min_x - tolerance
-        || position.x > max_x + tolerance
-        || position.y < min_y - tolerance
-        || position.y > max_y + tolerance
-    {
-        return false;
-    }
-    if depth >= 16
-        || (relationship_segment_distance(control1, start, end) <= flatness
-            && relationship_segment_distance(control2, start, end) <= flatness)
-    {
-        return relationship_segment_distance(position, start, end) <= tolerance;
-    }
-    let midpoint = |left: bellatrix_mde_cordis::Point, right: bellatrix_mde_cordis::Point| {
-        bellatrix_mde_cordis::Point {
-            x: left.x + (right.x - left.x) / 2.0,
-            y: left.y + (right.y - left.y) / 2.0,
-        }
-    };
-    let first = midpoint(start, control1);
-    let middle = midpoint(control1, control2);
-    let last = midpoint(control2, end);
-    let left = midpoint(first, middle);
-    let right = midpoint(middle, last);
-    let split = midpoint(left, right);
-    relationship_cubic_hit(
-        position,
-        [start, first, left, split],
-        tolerance,
-        flatness,
-        depth + 1,
-    ) || relationship_cubic_hit(
-        position,
-        [split, right, last, end],
-        tolerance,
-        flatness,
-        depth + 1,
-    )
 }
 
 fn contains_view(views: &[bellatrix_mde_cordis::projection::View], id: &str) -> bool {

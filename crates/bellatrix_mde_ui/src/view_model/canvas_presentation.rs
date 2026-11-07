@@ -1,5 +1,6 @@
 use crate::assets::theme::Palette;
 use bellatrix_mde_cordis::Geometry;
+use bellatrix_mde_cordis::PathSegment;
 use bellatrix_mde_cordis::presentation_contract::{RenderStyle, UmlNotation};
 use bellatrix_mde_cordis::projection::{ModelingProjection, View};
 
@@ -220,4 +221,125 @@ pub(crate) fn minimum_size(
             )
         })
         .unwrap_or((80.0, 48.0))
+}
+
+pub(crate) fn path_segment_index_at_position(
+    geometry: &Geometry,
+    position: bellatrix_mde_cordis::Point,
+    zoom: f32,
+) -> Option<usize> {
+    let Geometry::Path { start, segments } = geometry else {
+        return None;
+    };
+    // Keep the clickable stroke narrow at every zoom; control points are not painted edges.
+    let tolerance = 5.0 / f64::from(zoom);
+    let mut previous = *start;
+    for (index, segment) in segments.iter().enumerate() {
+        let (hit, end) = match segment {
+            PathSegment::Line { to } => (
+                relationship_segment_distance(position, previous, *to) <= tolerance,
+                *to,
+            ),
+            PathSegment::Cubic {
+                control1,
+                control2,
+                to,
+            } => (
+                relationship_cubic_hit(
+                    position,
+                    [previous, *control1, *control2, *to],
+                    tolerance,
+                    0.25 / f64::from(zoom),
+                    0,
+                ),
+                *to,
+            ),
+        };
+        if hit {
+            return Some(index);
+        }
+        previous = end;
+    }
+    None
+}
+
+fn relationship_segment_distance(
+    position: bellatrix_mde_cordis::Point,
+    start: bellatrix_mde_cordis::Point,
+    end: bellatrix_mde_cordis::Point,
+) -> f64 {
+    let delta_x = end.x - start.x;
+    let delta_y = end.y - start.y;
+    let length_squared = delta_x * delta_x + delta_y * delta_y;
+    let projection = if length_squared > f64::EPSILON {
+        (((position.x - start.x) * delta_x + (position.y - start.y) * delta_y) / length_squared)
+            .clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (position.x - start.x - projection * delta_x).hypot(position.y - start.y - projection * delta_y)
+}
+
+fn relationship_cubic_hit(
+    position: bellatrix_mde_cordis::Point,
+    points: [bellatrix_mde_cordis::Point; 4],
+    tolerance: f64,
+    flatness: f64,
+    depth: u8,
+) -> bool {
+    let [start, control1, control2, end] = points;
+    let min_x = points
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::INFINITY, f64::min);
+    let max_x = points
+        .iter()
+        .map(|point| point.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = points
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::INFINITY, f64::min);
+    let max_y = points
+        .iter()
+        .map(|point| point.y)
+        .fold(f64::NEG_INFINITY, f64::max);
+    if position.x < min_x - tolerance
+        || position.x > max_x + tolerance
+        || position.y < min_y - tolerance
+        || position.y > max_y + tolerance
+    {
+        return false;
+    }
+    if depth >= 16
+        || (relationship_segment_distance(control1, start, end) <= flatness
+            && relationship_segment_distance(control2, start, end) <= flatness)
+    {
+        return relationship_segment_distance(position, start, end) <= tolerance;
+    }
+    let midpoint = |left: bellatrix_mde_cordis::Point, right: bellatrix_mde_cordis::Point| {
+        bellatrix_mde_cordis::Point {
+            x: left.x + (right.x - left.x) / 2.0,
+            y: left.y + (right.y - left.y) / 2.0,
+        }
+    };
+    let first = midpoint(start, control1);
+    let middle = midpoint(control1, control2);
+    let last = midpoint(control2, end);
+    let left = midpoint(first, middle);
+    let right = midpoint(middle, last);
+    let split = midpoint(left, right);
+    relationship_cubic_hit(
+        position,
+        [start, first, left, split],
+        tolerance,
+        flatness,
+        depth + 1,
+    ) || relationship_cubic_hit(
+        position,
+        [split, right, last, end],
+        tolerance,
+        flatness,
+        depth + 1,
+    )
 }

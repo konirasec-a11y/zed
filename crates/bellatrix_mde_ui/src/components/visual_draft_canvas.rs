@@ -1,6 +1,8 @@
 //! View-only notation uses the same canvas figures and styles without pretending to be UML.
 use crate::assets::theme::WorkbenchPalette;
 use crate::components::canvas_interaction::CanvasGesture;
+use crate::components::canvas_interaction::path_segment_at_position;
+use crate::components::canvas_interaction::relationship_hit_test;
 use crate::elements::uml::UmlClassifier;
 use crate::elements::uml::UmlFigure;
 use crate::elements::uml::UmlLineSegment;
@@ -150,18 +152,7 @@ impl MdeWorkbenchItem {
                 };
                 let segments = segments
                     .iter()
-                    .map(|segment| match segment {
-                        PathSegment::Line { to } => UmlLineSegment::Line { to: place(*to) },
-                        PathSegment::Cubic {
-                            control1,
-                            control2,
-                            to,
-                        } => UmlLineSegment::Cubic {
-                            control1: place(*control1),
-                            control2: place(*control2),
-                            to: place(*to),
-                        },
-                    })
+                    .map(|segment| UmlLineSegment::from_path_segment(segment, &place))
                     .collect();
                 let resolved = view.relationship.as_ref()?;
                 let figure = UmlRelationGlyph::new(
@@ -266,7 +257,7 @@ impl MdeWorkbenchItem {
                     MouseButton::Left,
                     move |event: &MouseDownEvent, window, cx| {
                         if hit_geometry.as_ref().is_some_and(|geometry| {
-                            !crate::layouts::body::relationship_hit_test(
+                            !relationship_hit_test(
                                 geometry,
                                 event.position,
                                 click_origin.get(),
@@ -310,7 +301,7 @@ impl MdeWorkbenchItem {
                                             zoom,
                                         );
                                         if let Some(handle) =
-                                            crate::layouts::body::path_segment_at_position(
+                                            path_segment_at_position(
                                                 geometry,
                                                 bellatrix_mde_cordis::Point { x, y },
                                                 zoom,
