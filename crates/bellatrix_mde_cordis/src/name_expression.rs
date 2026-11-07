@@ -2,8 +2,7 @@ use crate::Command;
 pub use bellatrix_mde::contracts::events::{
     ModelingSetNameExpression, ModelingSetNameExpressionRequested,
 };
-use crate::project::{ProjectId, ProjectService};
-use cordis::Context;
+use crate::project::ProjectId;
 
 pub(crate) fn set_name_expression_command(
     request: ModelingSetNameExpressionRequested,
@@ -16,13 +15,4 @@ pub(crate) fn set_name_expression_command(
             expression: request.expression,
         },
     )
-}
-
-pub(crate) async fn set_name_expression(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingSetNameExpressionRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) = set_name_expression_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

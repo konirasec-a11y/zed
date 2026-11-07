@@ -1,4 +1,5 @@
 //! Diagram lifecycle requests share the same revision-checked mutation boundary as element edits.
+use crate::mutation::register_command;
 use crate::Command;
 use crate::{TraceOutcome, TracePhase};
 use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
@@ -154,87 +155,14 @@ pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Resu
             },
         ))
         .map_err(|error| io::Error::other(error.to_string()))?;
-    let create_projects = Arc::clone(&projects);
-    let _create = context
-        .on::<ModelingCreateDiagram, _>(responder(
-            move |context: Context, request: ModelingCreateDiagramRequested| {
-                let projects = Arc::clone(&create_projects);
-                async move {
-                    let (project_id, expected_revision, command) = create_diagram_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let explorer_projects = Arc::clone(&projects);
-    let _create_explorer = context
-        .on::<ModelingCreateExplorerDiagram, _>(responder(
-            move |context: Context, request: ModelingCreateExplorerDiagramRequested| {
-                let projects = Arc::clone(&explorer_projects);
-                async move {
-                    let (project_id, expected_revision, command) =
-                        create_explorer_diagram_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let rename_projects = Arc::clone(&projects);
-    let _rename = context
-        .on::<ModelingRenameDiagram, _>(responder(
-            move |context: Context, request: ModelingRenameDiagramRequested| {
-                let projects = Arc::clone(&rename_projects);
-                async move {
-                    let (project_id, expected_revision, command) = rename_diagram_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let delete_projects = Arc::clone(&projects);
-    let _delete = context
-        .on::<ModelingDeleteDiagram, _>(responder(
-            move |context: Context, request: ModelingDeleteDiagramRequested| {
-                let projects = Arc::clone(&delete_projects);
-                async move {
-                    let (project_id, expected_revision, command) = delete_diagram_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
+    register_command::<ModelingCreateDiagram>(context, &projects, create_diagram_command)?;
+    register_command::<ModelingCreateExplorerDiagram>(
+        context,
+        &projects,
+        create_explorer_diagram_command,
+    )?;
+    register_command::<ModelingRenameDiagram>(context, &projects, rename_diagram_command)?;
+    register_command::<ModelingDeleteDiagram>(context, &projects, delete_diagram_command)?;
     let traced_projects = Arc::clone(&projects);
     let _validate_traced = context
         .on::<ModelingValidateDiagramTraced, _>(responder(

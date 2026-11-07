@@ -1,3 +1,4 @@
+use crate::mutation::register_command;
 use crate::Command;
 pub use bellatrix_mde::contracts::events::{
     ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewLabel,
@@ -6,8 +7,8 @@ pub use bellatrix_mde::contracts::events::{
     ModelingSetViewStyleRequested, ModelingSetViewTiming, ModelingSetViewTimingRequested,
 };
 use crate::project::{ProjectId, ProjectService};
-use cordis::{Context, event::responder};
-use std::{convert::Infallible, io, sync::Arc};
+use cordis::Context;
+use std::{io, sync::Arc};
 
 pub(crate) fn set_view_label_command(
     request: ModelingSetViewLabelRequested,
@@ -92,126 +93,11 @@ pub(crate) fn reorder_view_command(
 }
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
-    let label_projects = Arc::clone(&projects);
-    let _label = context
-        .on::<ModelingSetViewLabel, _>(responder(
-            move |context: Context, request: ModelingSetViewLabelRequested| {
-                let projects = Arc::clone(&label_projects);
-                async move {
-                    let (project_id, expected_revision, command) = set_view_label_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let service = Arc::clone(&projects);
-    let _timing = context
-        .on::<ModelingSetViewTiming, _>(responder(
-            move |context: Context, request: ModelingSetViewTimingRequested| {
-                let projects = Arc::clone(&service);
-                async move {
-                    let (project_id, expected_revision, command) = set_view_timing_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let service = Arc::clone(&projects);
-    let _style = context
-        .on::<ModelingSetViewStyle, _>(responder(
-            move |context: Context, request: ModelingSetViewStyleRequested| {
-                let projects = Arc::clone(&service);
-                async move {
-                    let (project_id, expected_revision, command) = set_view_style_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let service = Arc::clone(&projects);
-    let _path = context
-        .on::<ModelingSetViewPath, _>(responder(
-            move |context: Context, request: ModelingSetViewPathRequested| {
-                let projects = Arc::clone(&service);
-                async move {
-                    let (project_id, expected_revision, command) = set_view_path_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let service = Arc::clone(&projects);
-    let _routing = context
-        .on::<ModelingSetViewRouting, _>(responder(
-            move |context: Context, request: ModelingSetViewRoutingRequested| {
-                let projects = Arc::clone(&service);
-                async move {
-                    let (project_id, expected_revision, command) =
-                        set_view_routing_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let service = Arc::clone(&projects);
-    let _order = context
-        .on::<ModelingReorderView, _>(responder(
-            move |context: Context, request: ModelingReorderViewRequested| {
-                let projects = Arc::clone(&service);
-                async move {
-                    let (project_id, expected_revision, command) = reorder_view_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
+    register_command::<ModelingSetViewLabel>(context, &projects, set_view_label_command)?;
+    register_command::<ModelingSetViewTiming>(context, &projects, set_view_timing_command)?;
+    register_command::<ModelingSetViewStyle>(context, &projects, set_view_style_command)?;
+    register_command::<ModelingSetViewPath>(context, &projects, set_view_path_command)?;
+    register_command::<ModelingSetViewRouting>(context, &projects, set_view_routing_command)?;
+    register_command::<ModelingReorderView>(context, &projects, reorder_view_command)?;
     Ok(())
 }

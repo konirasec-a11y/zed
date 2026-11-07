@@ -1,7 +1,6 @@
 use crate::Command;
 pub use bellatrix_mde::contracts::events::{ModelingResizeView, ModelingResizeViewRequested};
-use crate::project::{ProjectId, ProjectService};
-use cordis::Context;
+use crate::project::ProjectId;
 
 pub(crate) fn resize_view_command(
     request: ModelingResizeViewRequested,
@@ -15,13 +14,4 @@ pub(crate) fn resize_view_command(
             height: request.height,
         },
     )
-}
-
-pub(crate) async fn resize_view(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingResizeViewRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) = resize_view_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

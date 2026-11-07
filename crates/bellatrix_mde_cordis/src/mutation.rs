@@ -5,11 +5,38 @@ use crate::project::{
     ProjectDocument, ProjectId, ProjectReplaceSnapshot, ProjectReplaceSnapshotRequested,
     ProjectService,
 };
-use cordis::{Context, Routing, event::QueryOutcome};
+use cordis::{
+    Context, Event, Routing,
+    event::{QueryOutcome, responder},
+};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::{convert::Infallible, io};
 
 static NEXT_MUTATION_RUN: AtomicU64 = AtomicU64::new(1);
+
+pub(crate) fn register_command<E>(
+    context: &Context,
+    projects: &Arc<ProjectService>,
+    command: fn(E::Args) -> (ProjectId, u64, Command),
+) -> Result<(), io::Error>
+where
+    E: Event<Output = Result<u64, String>>,
+{
+    let projects = Arc::clone(projects);
+    context
+        .on::<E, _>(responder(move |context: Context, request: E::Args| {
+            let projects = Arc::clone(&projects);
+            async move {
+                let (project_id, expected_revision, command) = command(request);
+                let result =
+                    execute(&context, &projects, project_id, expected_revision, command).await;
+                Ok::<_, Infallible>(Some(result))
+            }
+        }))
+        .map(|_| ())
+        .map_err(|error| io::Error::other(error.to_string()))
+}
 
 pub(crate) async fn execute(
     context: &Context,

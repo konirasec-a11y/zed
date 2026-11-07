@@ -3,8 +3,7 @@ pub use bellatrix_mde::contracts::events::{
     ModelingAddMember, ModelingAddMemberRequested, ModelingMoveParameter,
     ModelingMoveParameterRequested,
 };
-use crate::project::{ProjectId, ProjectService};
-use cordis::Context;
+use crate::project::ProjectId;
 
 pub(crate) fn add_member_command(request: ModelingAddMemberRequested) -> (ProjectId, u64, Command) {
     (
@@ -17,14 +16,6 @@ pub(crate) fn add_member_command(request: ModelingAddMemberRequested) -> (Projec
     )
 }
 
-pub(crate) async fn add_member(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingAddMemberRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) = add_member_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
-}
 pub(crate) fn move_parameter_command(
     request: ModelingMoveParameterRequested,
 ) -> (ProjectId, u64, Command) {
@@ -36,13 +27,4 @@ pub(crate) fn move_parameter_command(
             up: request.up,
         },
     )
-}
-
-pub(crate) async fn move_parameter(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingMoveParameterRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) = move_parameter_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

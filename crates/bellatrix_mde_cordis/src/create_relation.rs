@@ -4,8 +4,7 @@ pub use bellatrix_mde::contracts::events::{
     ModelingCreateRelationAtViewsRequested, ModelingCreateRelationOrVisualDraft,
     ModelingCreateRelationRequested,
 };
-use crate::project::{ProjectId, ProjectService};
-use cordis::Context;
+use crate::project::ProjectId;
 
 pub(crate) fn create_relation_at_views_or_visual_draft_command(
     request: ModelingCreateRelationAtViewsRequested,
@@ -25,15 +24,6 @@ pub(crate) fn create_relation_at_views_or_visual_draft_command(
     )
 }
 
-pub(crate) async fn create_relation_at_views_or_visual_draft(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingCreateRelationAtViewsRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) =
-        create_relation_at_views_or_visual_draft_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
-}
 pub(crate) fn create_relation_or_visual_draft_command(
     request: ModelingCreateRelationRequested,
 ) -> (ProjectId, u64, Command) {
@@ -50,14 +40,6 @@ pub(crate) fn create_relation_or_visual_draft_command(
     )
 }
 
-pub(crate) async fn create_relation_or_visual_draft(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingCreateRelationRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) = create_relation_or_visual_draft_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
-}
 pub(crate) fn create_relation_command(
     request: ModelingCreateRelationRequested,
 ) -> (ProjectId, u64, Command) {
@@ -72,13 +54,4 @@ pub(crate) fn create_relation_command(
             to: request.to,
         },
     )
-}
-
-pub(crate) async fn create_relation(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingCreateRelationRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) = create_relation_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

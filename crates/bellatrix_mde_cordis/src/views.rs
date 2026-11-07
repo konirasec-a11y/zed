@@ -1,3 +1,4 @@
+use crate::mutation::register_command;
 use crate::Command;
 pub use bellatrix_mde::contracts::events::{
     ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested, ModelingPlaceElementView,
@@ -5,8 +6,7 @@ pub use bellatrix_mde::contracts::events::{
 };
 use crate::project::{ProjectId, ProjectService};
 use cordis::Context;
-use cordis::event::responder;
-use std::{convert::Infallible, io, sync::Arc};
+use std::{io, sync::Arc};
 
 pub(crate) fn create_visual_draft_command(
     request: ModelingCreateVisualDraftRequested,
@@ -56,66 +56,8 @@ pub(crate) fn remove_view_command(
 }
 
 pub(crate) fn register(context: &Context, projects: Arc<ProjectService>) -> Result<(), io::Error> {
-    let draft_projects = Arc::clone(&projects);
-    let _draft = context
-        .on::<ModelingCreateVisualDraft, _>(responder(
-            move |context: Context, request: ModelingCreateVisualDraftRequested| {
-                let projects = Arc::clone(&draft_projects);
-                async move {
-                    let (project_id, expected_revision, command) =
-                        create_visual_draft_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let place_projects = Arc::clone(&projects);
-    let _place = context
-        .on::<ModelingPlaceElementView, _>(responder(
-            move |context: Context, request: ModelingPlaceElementViewRequested| {
-                let projects = Arc::clone(&place_projects);
-                async move {
-                    let (project_id, expected_revision, command) =
-                        place_element_view_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let _remove = context
-        .on::<ModelingRemoveView, _>(responder(
-            move |context: Context, request: ModelingRemoveViewRequested| {
-                let projects = Arc::clone(&projects);
-                async move {
-                    let (project_id, expected_revision, command) = remove_view_command(request);
-                    let result = crate::mutation::execute(
-                        &context,
-                        &projects,
-                        project_id,
-                        expected_revision,
-                        command,
-                    )
-                    .await;
-                    Ok::<_, Infallible>(Some(result))
-                }
-            },
-        ))
-        .map_err(|error| io::Error::other(error.to_string()))?;
+    register_command::<ModelingCreateVisualDraft>(context, &projects, create_visual_draft_command)?;
+    register_command::<ModelingPlaceElementView>(context, &projects, place_element_view_command)?;
+    register_command::<ModelingRemoveView>(context, &projects, remove_view_command)?;
     Ok(())
 }

@@ -1,7 +1,6 @@
 use crate::Command;
 pub use bellatrix_mde::contracts::events::{ModelingQuickEdit, ModelingQuickEditRequested};
-use crate::project::{ProjectId, ProjectService};
-use cordis::Context;
+use crate::project::ProjectId;
 
 pub(crate) fn execute_quick_edit_command(
     request: ModelingQuickEditRequested,
@@ -16,13 +15,4 @@ pub(crate) fn execute_quick_edit_command(
             action: request.action,
         },
     )
-}
-
-pub(crate) async fn execute_quick_edit(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingQuickEditRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) = execute_quick_edit_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

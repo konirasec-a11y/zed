@@ -3,8 +3,7 @@ pub use bellatrix_mde::contracts::events::{
     ModelingCreateElement, ModelingCreateElementOrVisualDraft, ModelingCreateElementRequested,
     ModelingCreateModelElement, ModelingCreateModelElementRequested,
 };
-use crate::project::{ProjectId, ProjectService};
-use cordis::Context;
+use crate::project::ProjectId;
 
 pub(crate) fn create_element_or_visual_draft_command(
     request: ModelingCreateElementRequested,
@@ -23,14 +22,6 @@ pub(crate) fn create_element_or_visual_draft_command(
     )
 }
 
-pub(crate) async fn create_element_or_visual_draft(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingCreateElementRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) = create_element_or_visual_draft_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
-}
 pub(crate) fn create_element_command(
     request: ModelingCreateElementRequested,
 ) -> (ProjectId, u64, Command) {
@@ -48,14 +39,6 @@ pub(crate) fn create_element_command(
     )
 }
 
-pub(crate) async fn create_element(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingCreateElementRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) = create_element_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
-}
 pub(crate) fn create_model_element_command(
     request: ModelingCreateModelElementRequested,
 ) -> (ProjectId, u64, Command) {
@@ -68,13 +51,4 @@ pub(crate) fn create_model_element_command(
             name: request.name,
         },
     )
-}
-
-pub(crate) async fn create_model_element(
-    context: &Context,
-    projects: &ProjectService,
-    request: ModelingCreateModelElementRequested,
-) -> Result<u64, String> {
-    let (project_id, expected_revision, command) = create_model_element_command(request);
-    crate::mutation::execute(context, projects, project_id, expected_revision, command).await
 }

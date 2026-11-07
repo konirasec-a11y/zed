@@ -2,17 +2,12 @@ use crate::Command;
 pub use bellatrix_mde::contracts::events::{
     ModelingEditAssociationEnds, ModelingEditAssociationEndsRequested,
 };
-use crate::project::ProjectService;
-use cordis::Context;
+use crate::project::ProjectId;
 
-pub(crate) async fn edit_association_ends(
-    context: &Context,
-    projects: &ProjectService,
+pub(crate) fn edit_association_ends_command(
     request: ModelingEditAssociationEndsRequested,
-) -> Result<u64, String> {
-    crate::mutation::execute(
-        context,
-        projects,
+) -> (ProjectId, u64, Command) {
+    (
         request.project_id,
         request.expected_revision,
         Command::EditAssociationEnds {
@@ -20,5 +15,4 @@ pub(crate) async fn edit_association_ends(
             edits: request.edits,
         },
     )
-    .await
 }
