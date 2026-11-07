@@ -1,1 +1,1 @@
-pub use bellatrix_mde_contracts::uml::types::*;
+pub use crate::contracts::uml::types::*;

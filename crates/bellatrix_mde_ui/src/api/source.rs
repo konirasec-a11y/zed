@@ -3,9 +3,9 @@ use crate::pages::mde_page::MdeSnapshot;
 use bellatrix_mde_cordis::MdeSession;
 use bellatrix_mde_cordis::MdeUiBridge;
 use bellatrix_mde_cordis::MdeUiCommand;
-use bellatrix_project::ProjectDocument;
-use bellatrix_project::ProjectId;
-use bellatrix_project::ProjectService;
+use bellatrix_mde_cordis::project::ProjectDocument;
+use bellatrix_mde_cordis::project::ProjectId;
+use bellatrix_mde_cordis::project::ProjectService;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
@@ -876,7 +876,7 @@ impl MdeUiSource {
     pub fn save_project(&self, path: std::path::PathBuf) -> Result<(), String> {
         let document = self.document()?;
         self.submit(MdeUiCommand::SaveProject(
-            bellatrix_project::ProjectSaveRequested {
+            bellatrix_mde_cordis::project::ProjectSaveRequested {
                 expected_bytes: None,
                 document,
                 path,

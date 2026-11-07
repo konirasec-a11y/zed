@@ -1,8 +1,8 @@
 //! Single MDE domain: persisted objects, UML semantics, commands and validation.
 //! Adapters own transport/presentation, never another implementation of the model.
 
-pub(crate) use bellatrix_mde_contracts::protocol::model_snapshot as contracts;
-pub(crate) use contracts::*;
+pub mod contracts;
+pub(crate) use contracts::protocol::model_snapshot::*;
 #[path = "persistence/io.rs"]
 mod io;
 #[path = "persistence/mdj.rs"]
@@ -17,6 +17,12 @@ pub(crate) use io::{Format, ModelIoError, decode, encode};
 mod command_executor;
 #[path = "application/commands.rs"]
 pub(crate) mod commands;
+#[path = "application/generation/emission/rust_renderer.rs"]
+pub mod rust_renderer;
+#[path = "application/generation/emission/template_pack.rs"]
+pub mod template_pack;
+#[path = "application/export/html.rs"]
+pub mod html_renderer;
 #[path = "application/generation/emission/construction_script.rs"]
 mod construction_script;
 #[path = "view-model/diagram/diagram_operations.rs"]
@@ -87,8 +93,8 @@ mod uml_notation;
 mod uml_types;
 pub(crate) use templates::{template_parametered_element, template_parameters};
 
-pub(crate) use bellatrix_mde_contracts::protocol::command::StructuralDiagramKind;
-pub(crate) use bellatrix_mde_contracts::uml::validation::{
+pub(crate) use crate::contracts::protocol::command::StructuralDiagramKind;
+pub(crate) use crate::contracts::uml::validation::{
     RootMetaclass, StructuralDiagnostic, StructuralSeverity,
 };
 pub(crate) use construction_script::{ConstructionScriptError, python_construction_script};

@@ -304,7 +304,7 @@ enum ExplorerActionTarget {
 
 struct ExplorerActionDraft {
     item_id: gpui::EntityId,
-    project_id: bellatrix_project::ProjectId,
+    project_id: bellatrix_mde_cordis::project::ProjectId,
     target: ExplorerActionTarget,
     revision: u64,
     name: String,

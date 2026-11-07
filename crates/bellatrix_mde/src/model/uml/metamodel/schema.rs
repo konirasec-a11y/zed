@@ -1,4 +1,4 @@
-pub use bellatrix_mde_contracts::uml::schema::*;
+pub use crate::contracts::uml::schema::*;
 
 #[cfg(test)]
 use super::metamodel;

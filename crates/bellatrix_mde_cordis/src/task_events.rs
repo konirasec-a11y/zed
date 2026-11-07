@@ -1,11 +1,11 @@
 //! Tasks consume a committed project revision; generated artifacts are emissions.
 use crate::{TraceOutcome, TracePhase};
 use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     ModelingRun, ModelingRunRequested, ModelingTaskCompleted, ModelingTaskCompletedEvent,
     ModelingTaskKind, ModelingTaskSummary,
 };
-use bellatrix_project::ProjectService;
+use crate::project::ProjectService;
 use cordis::event::responder;
 use cordis::{Context, Routing};
 use std::{

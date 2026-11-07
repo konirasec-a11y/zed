@@ -6,7 +6,7 @@ Cordis is the external communication boundary. Its adapter calls these functions
 
 ## State and serialization
 
-The only persistent UML state is the typed `ruml::Registry` inside `bellatrix_mde_contracts::model::ModelingSection`. Command/render algorithms receive temporary `protocol::model_snapshot` records derived from it. A command returns a candidate, and the platform owns revision checks and atomic publication.
+The only persistent UML state is the typed `ruml::Registry` inside `bellatrix_mde::contracts::model::ModelingSection`. Command/render algorithms receive temporary `protocol::model_snapshot` records derived from it. A command returns a candidate, and the platform owns revision checks and atomic publication.
 
 Standalone document schema version is 2. The root uses `schemaVersion`, `id`, `name` and `model`; the model payload contains `registry`, presentation, diagrams and source metadata. Generated UML fields use the supplied camelCase contracts. The API envelope remains `{"api_version":1,"model":...}`; its version is independent of the document schema.
 

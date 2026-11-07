@@ -15,12 +15,12 @@ artifacts and emission; it is not limited to passive validation.
   Both boundaries share the private `api_contract.rs` envelope/codec helper;
   neither depends on the other.
 - `KERNEL/graph/`: graph integrity, indexing and graph-scope queries.
-- `KERNEL/uml/metamodel/`: adapters over `bellatrix_mde_contracts::uml`, with
+- `KERNEL/uml/metamodel/`: adapters over `bellatrix_mde::contracts::uml`, with
   engine-specific semantic reads and editing policy.
 - `KERNEL/uml/semantics/`: canonical UML identities, ownership, references,
   classifiers, properties, associations, operations, values and template rules.
 - `KERNEL/uml/validation/`: structural-model and diagram conformance checks.
-- `bellatrix_mde_contracts`: the separate shared crate containing canonical model
+- `src/contracts/`: the engine-owned module containing canonical model
   records, command inputs, read projection contracts and normative UML descriptors.
   Kernel, application, persistence and adapters use the same type definitions.
 - `persistence/`: JSON/Protobuf encoding, decoding and wire representation.
@@ -54,7 +54,7 @@ remain distinct from its native UI implementation.
 
 ## Similar names with different contexts
 
-- `bellatrix_mde_contracts::model::semantic` defines stored elements and relations;
+- `bellatrix_mde::contracts::model::semantic` defines stored elements and relations;
   `KERNEL/graph/graph.rs` validates the graph and `index.rs` queries it.
 - `KERNEL/uml/semantics/associations.rs` defines Association contracts;
   `view-model/diagram/relationships.rs` computes diagram paths and anchors.
@@ -233,14 +233,14 @@ follow this layout. No handwritten catalog copy is introduced.
 The compiler is implemented across existing headless crates, with public APIs
 kept stable rather than copying their implementations into this crate:
 
-- `bellatrix_mde_rust_generator/src/KERNEL/compiler/`: pure Rust/Cargo rendering
+- `src/application/generation/emission/rust_renderer/`: pure Rust/Cargo rendering
   of prepared emission tasks with the existing target templates. Source graph
   selection and placement stay in the kernel projection. The standalone
   `generate_rust_struct` kernel API lowers one UML Class to those tasks without
   resolving a Cargo project or persisting a target model.
-- `bellatrix_mde_templates/src/KERNEL/compiler/text/`: target-neutral Tera text
+- `src/application/generation/emission/template_pack.rs`: target-neutral Tera text
   emission from serialized contexts. It performs neither UML rules nor I/O.
-- `bellatrix_mde_html_exporter`: an HTML/SVG documentation export adapter using
+- `src/application/export/html.rs`: an HTML/SVG documentation export adapter using
   `Plan` and notation projections. Its visual renderers are not moved into the
   UML/formal compiler kernel merely because they emit files.
 

@@ -1,7 +1,7 @@
 //! Bounded MDE execution history shared by host consumers.
 use crate::ModelingExecutionTrace;
 use crate::{ExecutionEvent, TraceOutcome, TracePhase};
-pub use bellatrix_mde_contracts::events::ExecutionJournalSnapshot;
+pub use bellatrix_mde::contracts::events::ExecutionJournalSnapshot;
 use std::{
     collections::BTreeMap,
     sync::{
@@ -21,13 +21,13 @@ static NEXT_WORKSPACE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug)]
 pub enum ExecutionScope {
-    Document(bellatrix_project::ProjectId),
+    Document(crate::project::ProjectId),
     Workspace(u64),
 }
 
 #[derive(Default)]
 pub(crate) struct ExecutionJournals {
-    journals: Mutex<BTreeMap<bellatrix_project::ProjectId, Weak<ExecutionJournal>>>,
+    journals: Mutex<BTreeMap<crate::project::ProjectId, Weak<ExecutionJournal>>>,
 }
 
 impl cordis::Service for ExecutionJournals {
@@ -37,7 +37,7 @@ impl cordis::Service for ExecutionJournals {
 impl ExecutionJournals {
     pub(crate) fn journal(
         &self,
-        project_id: &bellatrix_project::ProjectId,
+        project_id: &crate::project::ProjectId,
     ) -> Arc<ExecutionJournal> {
         let mut journals = self
             .journals
@@ -78,7 +78,7 @@ pub struct ExecutionJournal {
     interaction_sequence: AtomicU64,
 }
 impl ExecutionJournal {
-    pub fn new(project_id: bellatrix_project::ProjectId) -> Self {
+    pub fn new(project_id: crate::project::ProjectId) -> Self {
         Self::with_scope(ExecutionScope::Document(project_id))
     }
     pub fn new_workspace() -> Self {
@@ -192,7 +192,7 @@ impl ExecutionJournal {
     /// Result messages may contain model data; never pass document bytes or payloads here.
     pub fn record_result<T>(
         &self,
-        project_id: bellatrix_project::ProjectId,
+        project_id: crate::project::ProjectId,
         revision: u64,
         action: &'static str,
         result: &Result<T, String>,

@@ -2,7 +2,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, project_model_section,
     validate_graph_model,
 };
-use bellatrix_mde_contracts::protocol::{command::*, projection::ModelingProjection};
+use bellatrix_mde::contracts::protocol::{command::*, projection::ModelingProjection};
 use serde_json::{Value, json};
 
 type FlowResult<T> = Result<T, Box<dyn std::error::Error>>;

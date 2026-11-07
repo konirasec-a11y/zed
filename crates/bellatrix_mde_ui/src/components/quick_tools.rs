@@ -10,7 +10,7 @@ use bellatrix_mde_cordis::QuickEditSide;
 use bellatrix_mde_cordis::projection::Element;
 use bellatrix_mde_cordis::projection::ModelingProjection;
 use bellatrix_mde_cordis::projection::Relation;
-use bellatrix_project::ProjectId;
+use bellatrix_mde_cordis::project::ProjectId;
 use gpui::Entity;
 use ui::IconName;
 

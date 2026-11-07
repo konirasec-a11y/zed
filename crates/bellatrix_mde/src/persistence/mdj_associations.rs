@@ -43,7 +43,7 @@ fn supported(field: &str, value: &Value, end: bool) -> bool {
         "multiplicity" if end => value.as_str().is_some_and(|text| {
             text.is_empty()
                 || text
-                    .parse::<bellatrix_mde_contracts::uml::types::MultiplicityRange>()
+                    .parse::<crate::contracts::uml::types::MultiplicityRange>()
                     .is_ok()
         }),
         "isReadOnly" | "isOrdered" | "isUnique" if end => value.is_boolean(),
@@ -129,7 +129,7 @@ fn representable(object: &mdj::Object<'_>, index: &mdj::Index<'_>) -> bool {
                 .and_then(|target| canonical_kind_for_object(target, index))
                 .and_then(crate::uml::root::object_metaclass)
                 .is_some_and(|kind| {
-                    bellatrix_mde_contracts::uml::metamodel::conforms_to(kind, "Type")
+                    crate::contracts::uml::metamodel::conforms_to(kind, "Type")
                 })
         })
     })

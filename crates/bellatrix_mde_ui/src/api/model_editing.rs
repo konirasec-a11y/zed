@@ -9,7 +9,7 @@ use crate::view_model::snapshot::MdeSnapshot;
 use bellatrix_mde_cordis::ModelingElementKind;
 use bellatrix_mde_cordis::ModelingMemberKind;
 use bellatrix_mde_cordis::ModelingTool;
-use bellatrix_project::ProjectId;
+use bellatrix_mde_cordis::project::ProjectId;
 use gpui::Context;
 use gpui::Window;
 

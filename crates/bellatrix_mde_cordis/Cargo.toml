@@ -6,13 +6,10 @@ edition.workspace = true
 rust-version = "1.98.1"
 
 [dependencies]
-bellatrix_mde_contracts = { workspace = true, features = ["cordis"] }
-bellatrix_project = { path = "../bellatrix_project" }
-bellatrix_mde = { path = "../bellatrix_mde" }
+bellatrix_mde = { path = "../bellatrix_mde", features = ["cordis"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 cordis-rs.workspace = true
 tokio.workspace = true
 tempfile.workspace = true
-bellatrix_mde_rust_generator = { path = "../bellatrix_mde_rust_generator" }
-bellatrix_mde_html_exporter = { path = "../bellatrix_mde_html_exporter" }
+thiserror.workspace = true

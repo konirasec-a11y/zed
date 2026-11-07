@@ -1,10 +1,10 @@
 use crate::MODELING_NAMESPACE;
 use crate::project_integration::section_json;
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     MdjExportReceipt, ModelingDocumentFormat, ModelingExportMdj, ModelingExportMdjRequested,
     ModelingPrepareDocument, ModelingPrepareDocumentRequested, PreparedModelingDocument,
 };
-use bellatrix_project::{ProjectDocument, ProjectService};
+use crate::project::{ProjectDocument, ProjectService};
 use cordis::{Context, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
 
@@ -54,7 +54,7 @@ fn document_from_response(response: &str) -> Result<PreparedModelingDocument, St
     })
     .map_err(|error| error.to_string())?;
     let parts = bellatrix_mde::prepare_model_document(&request).map_err(api_error_message)?;
-    let id = bellatrix_project::ProjectId::new(parts.id).map_err(|error| error.to_string())?;
+    let id = crate::project::ProjectId::new(parts.id).map_err(|error| error.to_string())?;
     let state = serde_json::from_str(&parts.section_json).map_err(|error| error.to_string())?;
     let document = ProjectDocument::new(id, parts.name)
         .map_err(|error| error.to_string())?
@@ -80,7 +80,7 @@ fn document_from_response(response: &str) -> Result<PreparedModelingDocument, St
 
 #[derive(serde::Deserialize)]
 struct RawProjectDocument {
-    id: bellatrix_project::ProjectId,
+    id: crate::project::ProjectId,
     name: String,
     #[serde(default, deserialize_with = "deserialize_raw_sections")]
     sections: std::collections::BTreeMap<String, Box<serde_json::value::RawValue>>,

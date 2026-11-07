@@ -2,7 +2,7 @@
 mod events;
 use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::{MdePlugin, ModelingMoveView, ModelingMoveViewRequested};
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectClose, ProjectCloseRequested, ProjectCreate, ProjectCreateRequested, ProjectDocument,
     ProjectId, ProjectOpen, ProjectOpenRequested, ProjectPlugin, ProjectSave, ProjectSaveRequested,
     ProjectService, ProjectStateChangedEvent,
@@ -41,7 +41,7 @@ async fn view_movement_is_public_versioned_and_isolated() {
     let capture = Arc::clone(&seen);
     let _listener = ctx
         .on::<ProjectStateChangedEvent, _>(observer_sync(
-            move |_, event: bellatrix_project::ProjectStateChanged| {
+            move |_, event: bellatrix_mde_cordis::project::ProjectStateChanged| {
                 capture.lock().unwrap().push((event.id, event.revision));
                 Ok::<_, std::convert::Infallible>(())
             },

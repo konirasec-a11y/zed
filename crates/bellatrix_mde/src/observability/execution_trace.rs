@@ -1,5 +1,5 @@
 //! Opt-in execution events. A caller owns each bounded run and chooses how to export it.
-pub use bellatrix_mde_contracts::protocol::trace::{ExecutionEvent, TraceOutcome, TracePhase};
+pub use crate::contracts::protocol::trace::{ExecutionEvent, TraceOutcome, TracePhase};
 
 type EventSink = std::sync::Arc<dyn Fn(&ExecutionEvent) + Send + Sync>;
 

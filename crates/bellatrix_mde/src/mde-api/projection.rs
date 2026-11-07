@@ -1,9 +1,9 @@
 use crate::mde_api_projection_notation::{
     project_render_styles, project_view, relationship_labels,
 };
-use bellatrix_mde_contracts::protocol::command::*;
-use bellatrix_mde_contracts::protocol::presentation::*;
-pub(crate) use bellatrix_mde_contracts::protocol::projection::*;
+use crate::contracts::protocol::command::*;
+use crate::contracts::protocol::presentation::*;
+pub(crate) use crate::contracts::protocol::projection::*;
 
 pub(crate) fn decode_section(
     project_id: &str,
@@ -16,7 +16,7 @@ pub(crate) fn decode_section(
 }
 
 fn project_decoded_section(
-    stored: bellatrix_mde_contracts::model::ModelingSection,
+    stored: crate::contracts::model::ModelingSection,
     project_id: &str,
     name: &str,
 ) -> Result<crate::ModelingSection, String> {
@@ -34,7 +34,7 @@ pub fn project_model_section(
     name: &str,
     section_json: &str,
 ) -> Result<ModelingProjection, String> {
-    let stored: bellatrix_mde_contracts::model::ModelingSection =
+    let stored: crate::contracts::model::ModelingSection =
         serde_json::from_str(section_json)
             .map_err(|error| format!("invalid MDE section: {error}"))?;
     // Retain the exact typed source, not contracts reconstructed from disposable UI records.

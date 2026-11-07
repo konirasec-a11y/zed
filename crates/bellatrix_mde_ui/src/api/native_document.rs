@@ -2,7 +2,7 @@ use crate::pages::mde_page::MdeUiSource;
 use crate::pages::mde_page::MdeWorkbenchItem;
 use crate::view_model::native_document_guard::NativeBufferState;
 use crate::view_model::native_document_guard::NativeDocumentGuard;
-use bellatrix_project::ProjectDocument;
+use bellatrix_mde_cordis::project::ProjectDocument;
 use gpui::App;
 use gpui::AppContext;
 use gpui::Context;

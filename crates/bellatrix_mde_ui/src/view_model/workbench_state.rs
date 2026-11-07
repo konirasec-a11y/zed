@@ -1,6 +1,6 @@
 use super::selection::ReconciledSelection;
 use bellatrix_mde_cordis::ModelingTool;
-use bellatrix_project::ProjectId;
+use bellatrix_mde_cordis::project::ProjectId;
 
 #[derive(Clone)]
 pub(crate) struct PendingRelationEndpoint {

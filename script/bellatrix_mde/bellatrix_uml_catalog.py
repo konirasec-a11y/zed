@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ElementTree
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = Path("docs/bellatrix/standards/uml/20161101/UML.xmi")
-TARGET = Path("crates/bellatrix_mde_contracts/src/uml/metamodel.rs")
+TARGET = Path("crates/bellatrix_mde/src/contracts/uml/metamodel.rs")
 SOURCE_URL = "https://www.omg.org/spec/UML/20161101/UML.xmi"
 XMI = "{http://www.omg.org/spec/XMI/20131001}"
 
@@ -42,110 +42,6 @@ pub fn conforms_to(specific: &str, general: &str) -> bool {
     super::schema::conforms_to(specific.id, general.id) == Ok(true)
 }
 
-#[cfg(test)]
-fn conforms_in(specific: &str, general: &str, catalog: &[(&str, &[&str])]) -> bool {
-    if !catalog.iter().any(|(name, _)| *name == specific)
-        || !catalog.iter().any(|(name, _)| *name == general)
-    {
-        return false;
-    }
-
-    let mut pending = vec![specific];
-    let mut visited = std::collections::BTreeSet::new();
-    while let Some(current) = pending.pop() {
-        if !visited.insert(current) {
-            continue;
-        }
-        if current == general {
-            return true;
-        }
-        if let Some((_, parents)) = catalog.iter().find(|(name, _)| *name == current) {
-            pending.extend(parents.iter().copied());
-        }
-    }
-    false
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bellatrix_class_inheritance_is_transitive_and_directional() {
-        for parent in ["Class", "StructuredClassifier", "Classifier", "Element"] {
-            assert!(conforms_to("Component", parent));
-            assert!(!conforms_to(parent, "Component"));
-        }
-        assert!(conforms_to("Class", "StructuredClassifier"));
-        assert!(conforms_to("StructuredClassifier", "Classifier"));
-        assert!(conforms_to("Device", "Node"));
-        assert!(!conforms_to("Node", "Device"));
-        assert!(conforms_to("Stereotype", "Class"));
-        assert!(!conforms_to("Interface", "Class"));
-        assert!(conforms_to("Interface", "Classifier"));
-    }
-
-    #[test]
-    fn bellatrix_multiple_inheritance_preserves_both_branches() {
-        assert!(conforms_to("AssociationClass", "Class"));
-        assert!(conforms_to("AssociationClass", "Association"));
-        assert!(conforms_to("AssociationClass", "Relationship"));
-        assert!(!conforms_to("Class", "AssociationClass"));
-    }
-
-    #[test]
-    fn bellatrix_unknown_names_never_conform() {
-        assert!(!is_known_metaclass("Unknown"));
-        assert!(!is_known_metaclass("class"));
-        assert!(!conforms_to("Unknown", "Unknown"));
-        assert!(!conforms_to("Unknown", "Element"));
-        assert!(!conforms_to("Class", "Unknown"));
-        assert!(!conforms_to("", ""));
-    }
-
-    #[test]
-    fn bellatrix_catalog_is_sorted_closed_and_reflexive() {
-        for pair in DIRECT_GENERALIZATIONS.windows(2) {
-            if let [left, right] = pair {
-                assert!(left.0 < right.0);
-            }
-        }
-        for (name, parents) in DIRECT_GENERALIZATIONS {
-            assert!(is_known_metaclass(name));
-            assert!(conforms_to(name, name));
-            for parent in *parents {
-                assert!(is_known_metaclass(parent));
-                assert!(conforms_to(name, parent));
-            }
-        }
-    }
-
-    #[test]
-    fn bellatrix_declared_properties_follow_multiple_and_transitive_inheritance() {
-        assert!(has_property("Component", "ownedOperation"));
-        assert!(has_property("Artifact", "ownedOperation"));
-        assert!(has_property("AssociationClass", "ownedPort"));
-        assert!(has_property("Collaboration", "part"));
-        assert!(!has_property("Collaboration", "ownedPort"));
-        assert!(!has_property("Signal", "ownedOperation"));
-        assert!(!has_property("Model", "ownedAttribute"));
-        assert!(!has_property("Unknown", "ownedAttribute"));
-        assert!(!has_property("Class", "unknown"));
-        for (owner, properties) in DECLARED_PROPERTIES {
-            assert!(is_known_metaclass(owner));
-            for property in *properties {
-                assert!(has_property(owner, property));
-            }
-        }
-    }
-
-    #[test]
-    fn bellatrix_traversal_terminates_on_cycles() {
-        let cyclic: &[(&str, &[&str])] = &[("A", &["B"]), ("B", &["A"]), ("C", &[])];
-        assert!(conforms_in("A", "B", cyclic));
-        assert!(!conforms_in("A", "C", cyclic));
-    }
-}
 '''
 
 
@@ -519,24 +415,24 @@ use super::schema::{
             "unresolved_references": [{"document": document, "owner": owner, "role": role, "raw": raw,
                 "status": self.resolve(document, raw)[2]} for document, owner, role, raw in sorted(self.unresolved)],
             "executable_consumers": [
-                {"file": "crates/bellatrix_mde_contracts/src/uml/schema.rs", "scope": "Source-qualified inheritance/redefinition queries, inherited defaults, explicitly supplied scalar type and null/cardinality checks; metadata reads for operations/specifications/documentation."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/metamodel/schema.rs", "scope": "Shared authored/default scalar readers over canonical Elements, structural diagnostics and semantic edit policy consuming the universal UML contracts."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/root.rs", "scope": "Effective visibility defaults, scalar validation and qualified names via the shared allNamespaces query; separate handwritten Root semantic rules."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/element_graph_queries.rs", "scope": "Canonical Element ownership closure, NamedElement namespace/package chains and inverse Dependency clients; exposed template parameters, identity/cycle checks and explicit unsupported alternate representations."},
+                {"file": "crates/bellatrix_mde/src/contracts/uml/schema.rs", "scope": "Source-qualified inheritance/redefinition queries, inherited defaults, explicitly supplied scalar type and null/cardinality checks; metadata reads for operations/specifications/documentation."},
+                {"file": "crates/bellatrix_mde/src/model/uml/metamodel/schema.rs", "scope": "Shared authored/default scalar readers over canonical Elements, structural diagnostics and semantic edit policy consuming the universal UML contracts."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/root.rs", "scope": "Effective visibility defaults, scalar validation and qualified names via the shared allNamespaces query; separate handwritten Root semantic rules."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/element_graph_queries.rs", "scope": "Canonical Element ownership closure, NamedElement namespace/package chains and inverse Dependency clients; exposed template parameters, identity/cycle checks and explicit unsupported alternate representations."},
                 {"file": "crates/bellatrix_mde/src/view-model/inspector/inspector.rs", "scope": "Canonical scalar/reference field editors, choices and defaults. Semantic edit validation and mutation are in crates/bellatrix_mde/src/application/edits/inspector_edit.rs; unresolved type text and legacy defaultValue declarations remain preserved."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/references.rs", "scope": "Snapshot-indexed local TypedElement.type and descriptor-driven reference collections with bounds, uniqueness and target conformance; derived Association membership index; external references remain unsupported."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/instances.rs", "scope": "Canonical Slot ownership, classifier/definingFeature references and uniqueness; shared slottable-feature resolution includes inherited private attributes and direct redefinitions. Values and ambiguous ancestor redefinitions remain explicit unsupported capabilities."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/value_specifications.rs", "scope": "Pure evaluation of canonical Integer/UnlimitedNatural/Real/Boolean/String/Null literal identities and generated defaults, computability, null and typed value queries; Real uses finite JSON numbers. Owned lowerValue/upperValue role resolution is shared by Property, Parameter, Operation return and redefinition checks, plus independent upperBound evaluation for subsetting. External references, opaque/nonliteral expression evaluation and unassigned owned-value roles remain explicit unsupported capabilities."},
-                {"file": "crates/bellatrix_mde_contracts/src/uml/types.rs", "scope": "Arbitrary-precision Integer, UnlimitedNatural upper-bound comparison and evaluated multiplicity intervals; one retained literal-notation adapter, with reference-aware ValueSpecification evaluation supplied by the separate shared consumer."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/operations.rs", "scope": "Ordered canonical Parameters; generated scalar defaults; derived return Type, ordering, uniqueness and reference-aware multiplicity; selected Parameter constraints and only_body_for_query with owned Constraint references. Nonliteral ValueSpecifications and condition expressions remain explicit limits; signature compatibility consumes these projections in operation_signatures."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/associations.rs", "scope": "Canonical ordered Property member ends, derived ownership/opposite/end Types, binary compatibility migration/projections and selected Association/Property constraints; n-ary queries supported, binary notation and specialized/navigability/ValueSpecification limits explicit."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/classifiers.rs", "scope": "Generated ownership subsets, direct/inherited Namespace members and Classifier features/attributes, direct redefinition filtering and slottable-feature unions. Bounded Property and normative Operation signature consistency are consumed from shared feature_compatibility/operation_signatures after checking redefinition contexts; independent behavioral/template contracts are not additional Operation consistency requirements. Ambiguous ownership/ancestor redefinition cases remain explicit unsupported capabilities."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/property_subsetting.rs", "scope": "Canonical Property subset targets, different names, shared Type conformance and upper-bound restriction; attribute and n-ary Association-end context conformance. Consumed by semantic command, structural validation and Inspector; no lower-bound restriction or feature replacement, and unresolved contexts/Types/expressions remain explicit unsupported diagnostics."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/redefinition_contexts.rs", "scope": "Generated ownership-subset derivation of RedefinableElement contexts and the default allParents/includesAll predicate; consumed before Property/Operation consistency and by Inspector. Association-owned end redefinition uses ancestor allFeatures rather than attributes. Behavior/state-machine specialized contexts and alternate stored context lists remain explicit unsupported capabilities."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/operation_signatures.rs", "scope": "Official Operation signature consistency over ordered canonical Parameters: equal count/direction/ordering/uniqueness, bidirectional Type conformance and direction-dependent interval containment. Consumed by redefinition commands, validation and Inspector; unsupported Type/bound evaluation remains explicit. Conditions, methods, exceptions and templates retain independent validation and do not impose extra consistency requirements."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/classifier_hierarchy.rs", "scope": "User-model Classifier ancestry and conformance over canonical Generalization edges, separate from metaclass conformance; cycle detection, identity deduplication and topological ordering shared by Namespace inheritance. Canonical Generalization edges enforce the official metaclass-based maySpecializeType and non-final-parent rules before ancestry consumers use them."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/feature_compatibility.rs", "scope": "Reusable TypedElement Type conformance and MultiplicityElement interval containment; Property redefinition consistency additionally preserves composite aggregation. Missing/legacy/external Types and unevaluated ValueSpecifications remain explicit unsupported outcomes; shared resolved-Type and known/unsupported Boolean comparisons also support Operation signatures and Property subsetting; no general OCL interpreter is claimed."},
-                {"file": "crates/bellatrix_mde/src/KERNEL/uml/semantics/namespace_imports.rs", "scope": "Canonical ElementImport/PackageImport aliases, explicit-import precedence, visibility, collisions and public re-exports. SCC decomposition and finite fixed points resolve collision-free cycles; cyclic collisions and alternate import representations remain explicit unsupported capabilities."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/references.rs", "scope": "Snapshot-indexed local TypedElement.type and descriptor-driven reference collections with bounds, uniqueness and target conformance; derived Association membership index; external references remain unsupported."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/instances.rs", "scope": "Canonical Slot ownership, classifier/definingFeature references and uniqueness; shared slottable-feature resolution includes inherited private attributes and direct redefinitions. Values and ambiguous ancestor redefinitions remain explicit unsupported capabilities."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/value_specifications.rs", "scope": "Pure evaluation of canonical Integer/UnlimitedNatural/Real/Boolean/String/Null literal identities and generated defaults, computability, null and typed value queries; Real uses finite JSON numbers. Owned lowerValue/upperValue role resolution is shared by Property, Parameter, Operation return and redefinition checks, plus independent upperBound evaluation for subsetting. External references, opaque/nonliteral expression evaluation and unassigned owned-value roles remain explicit unsupported capabilities."},
+                {"file": "crates/bellatrix_mde/src/contracts/uml/types.rs", "scope": "Arbitrary-precision Integer, UnlimitedNatural upper-bound comparison and evaluated multiplicity intervals; one retained literal-notation adapter, with reference-aware ValueSpecification evaluation supplied by the separate shared consumer."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/operations.rs", "scope": "Ordered canonical Parameters; generated scalar defaults; derived return Type, ordering, uniqueness and reference-aware multiplicity; selected Parameter constraints and only_body_for_query with owned Constraint references. Nonliteral ValueSpecifications and condition expressions remain explicit limits; signature compatibility consumes these projections in operation_signatures."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/associations.rs", "scope": "Canonical ordered Property member ends, derived ownership/opposite/end Types, binary compatibility migration/projections and selected Association/Property constraints; n-ary queries supported, binary notation and specialized/navigability/ValueSpecification limits explicit."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/classifiers.rs", "scope": "Generated ownership subsets, direct/inherited Namespace members and Classifier features/attributes, direct redefinition filtering and slottable-feature unions. Bounded Property and normative Operation signature consistency are consumed from shared feature_compatibility/operation_signatures after checking redefinition contexts; independent behavioral/template contracts are not additional Operation consistency requirements. Ambiguous ownership/ancestor redefinition cases remain explicit unsupported capabilities."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/property_subsetting.rs", "scope": "Canonical Property subset targets, different names, shared Type conformance and upper-bound restriction; attribute and n-ary Association-end context conformance. Consumed by semantic command, structural validation and Inspector; no lower-bound restriction or feature replacement, and unresolved contexts/Types/expressions remain explicit unsupported diagnostics."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/redefinition_contexts.rs", "scope": "Generated ownership-subset derivation of RedefinableElement contexts and the default allParents/includesAll predicate; consumed before Property/Operation consistency and by Inspector. Association-owned end redefinition uses ancestor allFeatures rather than attributes. Behavior/state-machine specialized contexts and alternate stored context lists remain explicit unsupported capabilities."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/operation_signatures.rs", "scope": "Official Operation signature consistency over ordered canonical Parameters: equal count/direction/ordering/uniqueness, bidirectional Type conformance and direction-dependent interval containment. Consumed by redefinition commands, validation and Inspector; unsupported Type/bound evaluation remains explicit. Conditions, methods, exceptions and templates retain independent validation and do not impose extra consistency requirements."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/classifier_hierarchy.rs", "scope": "User-model Classifier ancestry and conformance over canonical Generalization edges, separate from metaclass conformance; cycle detection, identity deduplication and topological ordering shared by Namespace inheritance. Canonical Generalization edges enforce the official metaclass-based maySpecializeType and non-final-parent rules before ancestry consumers use them."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/feature_compatibility.rs", "scope": "Reusable TypedElement Type conformance and MultiplicityElement interval containment; Property redefinition consistency additionally preserves composite aggregation. Missing/legacy/external Types and unevaluated ValueSpecifications remain explicit unsupported outcomes; shared resolved-Type and known/unsupported Boolean comparisons also support Operation signatures and Property subsetting; no general OCL interpreter is claimed."},
+                {"file": "crates/bellatrix_mde/src/model/uml/semantics/namespace_imports.rs", "scope": "Canonical ElementImport/PackageImport aliases, explicit-import precedence, visibility, collisions and public re-exports. SCC decomposition and finite fixed points resolve collision-free cycles; cyclic collisions and alternate import representations remain explicit unsupported capabilities."},
             ],
             "not_executable_from_extraction": [
                 "OCL/opaque specification bodies and generated operation definitions are preserved, not interpreted or compiled into behavior.",

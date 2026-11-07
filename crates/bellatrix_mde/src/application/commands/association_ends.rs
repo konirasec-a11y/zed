@@ -10,7 +10,7 @@ use crate::{
 use serde_json::json;
 use std::collections::{BTreeMap, HashSet};
 
-pub use bellatrix_mde_contracts::protocol::command::{
+pub use crate::contracts::protocol::command::{
     AssociationEndDraft, AssociationEndEdit, AssociationEndOwner, RemovedAssociationEnd,
 };
 

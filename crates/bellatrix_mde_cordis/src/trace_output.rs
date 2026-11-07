@@ -14,7 +14,7 @@ use std::{
 pub(crate) fn start(
     context: Context,
     trace: &mut ExecutionTrace,
-    project_id: bellatrix_project::ProjectId,
+    project_id: crate::project::ProjectId,
 ) -> tokio::task::JoinHandle<()> {
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<ExecutionEvent>(1024);
     let dropped = Arc::new(AtomicU64::new(0));

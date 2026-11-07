@@ -1,5 +1,5 @@
 use super::io::ModelIoError;
-use bellatrix_mde_contracts::model::Project;
+use crate::contracts::model::Project;
 use prost::Message;
 
 /// Binary transport carries the same typed document as JSON. It does not define

@@ -1,5 +1,5 @@
 use crate::{Diagram, Geometry, InterfaceConnectionRole, PathSegment, StereotypeDisplay, View};
-use bellatrix_mde_contracts::protocol::{
+use crate::contracts::protocol::{
     command::Point,
     projection::{InterfaceIconGlyph, InterfaceIconProjection},
 };

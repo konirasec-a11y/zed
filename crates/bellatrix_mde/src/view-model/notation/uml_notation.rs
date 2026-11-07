@@ -1,5 +1,5 @@
 use crate::{Element, ModelingSection, StereotypeValue, UmlType};
-pub use bellatrix_mde_contracts::protocol::presentation::UmlNotation;
+pub use crate::contracts::protocol::presentation::UmlNotation;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum StereotypePresentation<'a> {

@@ -16,5 +16,5 @@ pub(crate) fn prepare(
     );
     fields.insert("skeleton".into(), skeleton.into());
     let projection = bellatrix_mde::project_rust_generation(&request.to_string())?;
-    artifact_publication::prepare(&bellatrix_mde_rust_generator::render(&projection)?)
+    artifact_publication::prepare(&bellatrix_mde::rust_renderer::render(&projection)?)
 }

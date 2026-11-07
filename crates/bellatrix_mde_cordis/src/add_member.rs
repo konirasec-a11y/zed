@@ -1,9 +1,9 @@
 use crate::Command;
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     ModelingAddMember, ModelingAddMemberRequested, ModelingMoveParameter,
     ModelingMoveParameterRequested,
 };
-use bellatrix_project::{ProjectId, ProjectService};
+use crate::project::{ProjectId, ProjectService};
 use cordis::Context;
 
 pub(crate) fn add_member_command(request: ModelingAddMemberRequested) -> (ProjectId, u64, Command) {

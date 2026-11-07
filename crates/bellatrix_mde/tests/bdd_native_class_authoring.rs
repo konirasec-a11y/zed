@@ -2,7 +2,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, prepare_model_document,
     project_model_section,
 };
-use bellatrix_mde_contracts::{
+use bellatrix_mde::contracts::{
     Authored, Geometry, InheritedStyleProperty, ModelingSection, PresentationReference,
     RelationshipRouting, StyleInheritance, View, ViewEndpoints,
     protocol::{
@@ -1037,7 +1037,7 @@ fn author_classes_and_relationships_from_blank_then_reopen() -> FlowResult<()> {
         revision: flow.revision,
     };
     let with_diagram = multi_diagram.apply(Command::CreateDiagram {
-        kind: bellatrix_mde_contracts::protocol::StructuralDiagramKind::Class,
+        kind: bellatrix_mde::contracts::protocol::StructuralDiagramKind::Class,
         name: "Other diagram".into(),
         model_elements: vec!["model".into()],
     })?;

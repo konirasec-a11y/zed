@@ -1,8 +1,8 @@
 use crate::Command;
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     ModelingEditAssociationEnds, ModelingEditAssociationEndsRequested,
 };
-use bellatrix_project::ProjectService;
+use crate::project::ProjectService;
 use cordis::Context;
 
 pub(crate) async fn edit_association_ends(

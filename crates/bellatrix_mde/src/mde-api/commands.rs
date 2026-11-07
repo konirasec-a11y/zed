@@ -71,7 +71,7 @@ pub fn apply_model_command(
     name: &str,
     section_json: &str,
     revision: u64,
-    command: bellatrix_mde_contracts::protocol::command::Command,
+    command: crate::contracts::protocol::command::Command,
 ) -> Result<serde_json::Value, String> {
     let section = crate::mde_api_projection::decode_section(project_id, name, section_json)?;
     let source = section.to_model(project_id, name);

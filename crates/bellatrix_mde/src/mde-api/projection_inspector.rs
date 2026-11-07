@@ -1,4 +1,4 @@
-use bellatrix_mde_contracts::protocol::inspector::*;
+use crate::contracts::protocol::inspector::*;
 pub(crate) fn project_inspector(
     section: &crate::ModelingSection,
     id: &str,

@@ -1,5 +1,5 @@
 use crate::{Diagram, ModelingSection, RelationshipNotation, View};
-use bellatrix_mde_contracts::protocol::{
+use crate::contracts::protocol::{
     command::TextAlignment,
     presentation::{RenderShadow, RenderStyle},
     projection::{EntityBoxProjection, RenderedLabel},

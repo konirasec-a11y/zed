@@ -23,8 +23,8 @@ python3 script/bellatrix_mde/bellatrix_uml_catalog.py
 python3 script/bellatrix_mde/bellatrix_uml_catalog.py --check
 ```
 
-The generated files are `crates/bellatrix_mde_contracts/src/uml/metamodel.rs` and
-`crates/bellatrix_mde_contracts/src/uml/metamodel.inventory.json`. Do not edit
+The generated files are `crates/bellatrix_mde/src/contracts/uml/metamodel.rs` and
+`crates/bellatrix_mde/src/contracts/uml/metamodel.inventory.json`. Do not edit
 these files manually or use a formatter as a substitute for generation. The
 extractor locates its inputs relative to its own repository location, so it
 also works from another working directory. To inspect a separate output:
@@ -38,7 +38,7 @@ The coverage JSON defaults to the Rust output's `.inventory.json` sibling;
 `--inventory-output PATH` selects another destination. `--check` checks both
 outputs, performs no writes, and exits nonzero on drift, missing inputs, or an
 unsupported extraction shape. Output is deterministic for the same inputs and
-extractor. It imports descriptor types from the handwritten `bellatrix_mde_contracts::uml::schema`;
+extractor. It imports descriptor types from the handwritten `bellatrix_mde::contracts::uml::schema`;
 it is not a standalone Rust crate.
 
 ## Windows checkouts
@@ -121,7 +121,7 @@ values are resolved by type. No Integer is narrowed to a machine-sized type.
 
 ## Executable Rust consumers
 
-`crates/bellatrix_mde_contracts/src/uml/schema.rs` is handwritten and separate from the
+`crates/bellatrix_mde/src/contracts/uml/schema.rs` is handwritten and separate from the
 extractor. It provides source-qualified conformance and inherited-property
 queries, follows explicit redefinition edges, resolves effective defaults,
 and reports ambiguous or incomplete lookup. It also exposes source documentation,
@@ -130,7 +130,7 @@ Subsetting and equal property
 names are not treated as redefinition.
 
 The engine retains authored Element readers, structural diagnostics and edit policy in
-`crates/bellatrix_mde/src/KERNEL/uml/metamodel/schema.rs`; the shared crate has no dependency
+`crates/bellatrix_mde/src/model/uml/metamodel/schema.rs`; the contracts module has no dependency
 on engine validation or editor state. Existing engine paths re-export and use these contracts:
 
 - `uml/metamodel.rs` delegates inheritance and property queries to this runtime.
@@ -180,14 +180,18 @@ existing policy.
 
 ## Verification and remaining work
 
-The three complete flows in `uml/schema_tests.rs` cover source resolution and
-inheritance, canonical inspector/edit/validation/serialization behavior, and
-unbounded literal edits. Existing engine tests cover the callers as well.
-Supplemental headless validation avoids building the Zed UI workspace:
+Commit and push before running checks, builds or tests. `verify.ps1` checks the
+four retained crates and invokes `smoke.ps1`, which selects the existing BDD
+integration targets explicitly. It does not run unit tests. The former CLI
+artifact smoke has been retired; the application entrypoint is `cargo run -p zed`.
+
+Supplemental headless validation copies only `bellatrix_mde` and
+`bellatrix_mde_cordis`, without the Zed UI workspace. With no Cargo arguments,
+the helper runs all five existing BDD targets. For one target:
 
 ```sh
 python3 script/bellatrix_mde/bellatrix_headless.py \
-  --cache-dir /tmp/bellatrix-headless -- test -p bellatrix_mde --lib
+  --cache-dir /tmp/bellatrix-headless -- test -p bellatrix_mde --test bdd_diagram_flows
 ```
 
 This increment does not implement general OCL execution, generic collection or

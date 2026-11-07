@@ -1,6 +1,6 @@
 use crate::Command;
-pub use bellatrix_mde_contracts::events::{ModelingMoveView, ModelingMoveViewRequested};
-use bellatrix_project::{ProjectId, ProjectService};
+pub use bellatrix_mde::contracts::events::{ModelingMoveView, ModelingMoveViewRequested};
+use crate::project::{ProjectId, ProjectService};
 use cordis::Context;
 
 pub(crate) fn move_view_command(request: ModelingMoveViewRequested) -> (ProjectId, u64, Command) {

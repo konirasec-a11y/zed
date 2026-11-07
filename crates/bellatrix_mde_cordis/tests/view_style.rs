@@ -1,7 +1,7 @@
 #[path = "support/events.rs"]
 mod events;
 use bellatrix_mde_cordis::*;
-use bellatrix_project::*;
+use bellatrix_mde_cordis::project::*;
 use cordis::{Context, Plugin, PreparedPlugin, Routing, event::QueryOutcome};
 use serde_json::Value;
 use std::sync::Arc;

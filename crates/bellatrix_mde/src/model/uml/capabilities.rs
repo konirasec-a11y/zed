@@ -52,7 +52,7 @@ pub enum UmlCapability {
     Part,
 }
 
-pub use bellatrix_mde_contracts::protocol::command::UmlQuickCreate;
+pub use crate::contracts::protocol::command::UmlQuickCreate;
 
 impl UmlType {
     pub fn from_kind(kind: &str) -> Option<Self> {

@@ -1,5 +1,5 @@
 use crate::{ModelingSection, Project};
-use bellatrix_mde_contracts::model::{
+use crate::contracts::model::{
     ModelingSection as StoredSection, Project as StoredProject, StereotypeLabel,
     SubjectPresentation,
 };

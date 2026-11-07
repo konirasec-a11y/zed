@@ -4,7 +4,7 @@ use bellatrix_mde_cordis::{
     ModelingRenderHtml, ModelingRenderHtmlRequested, ModelingSetViewStyle,
     ModelingSetViewStyleRequested,
 };
-use bellatrix_project::{ProjectCreate, ProjectCreateRequested, ProjectPlugin, ProjectService};
+use bellatrix_mde_cordis::project::{ProjectCreate, ProjectCreateRequested, ProjectPlugin, ProjectService};
 use cordis::{Context, Plugin, PreparedPlugin, Routing, event::QueryOutcome};
 use serde_json::{Value, json};
 use std::{error::Error, fmt::Display, sync::Arc};

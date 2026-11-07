@@ -1,5 +1,5 @@
 use crate::{Command, DiagramValidationFailure, DiagramValidationResult, MdeUiCommand};
-use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
+use crate::project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::{Context, Routing, event::QueryOutcome};
 use std::{
     io,
@@ -347,7 +347,7 @@ pub(crate) async fn run(
                 Err("Save request belongs to another document snapshot".to_owned())
             } else {
                 match context
-                    .query::<bellatrix_project::ProjectSave>(Routing::Unscoped, request)
+                    .query::<crate::project::ProjectSave>(Routing::Unscoped, request)
                     .await
                 {
                     Ok(QueryOutcome::Answer(result)) => result.map_err(|error| error.to_string()),

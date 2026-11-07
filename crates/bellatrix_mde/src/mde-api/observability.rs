@@ -1,5 +1,5 @@
 //! Opaque execution observation handle over shared trace contracts.
-use bellatrix_mde_contracts::protocol::trace::{
+use crate::contracts::protocol::trace::{
     DiagnosticSeverity, ExecutionEvent, ModelingDiagnostic, TraceOutcome, TracePhase,
 };
 

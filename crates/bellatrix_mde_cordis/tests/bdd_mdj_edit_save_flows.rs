@@ -4,7 +4,7 @@ use bellatrix_mde_cordis::{
     ModelingExportMdjRequested, ModelingPrepareDocument, ModelingPrepareDocumentRequested,
     ModelingSetViewStyleRequested,
 };
-use bellatrix_project::*;
+use bellatrix_mde_cordis::project::*;
 use cordis::{
     Context, FiberHandle, Plugin, PreparedPlugin, Routing,
     event::{QueryOutcome, observer_sync},
@@ -814,7 +814,7 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
             }),
         )
         .await?;
-        let operation_section: bellatrix_mde_contracts::ModelingSection = serde_json::from_value(
+        let operation_section: bellatrix_mde::contracts::ModelingSection = serde_json::from_value(
             service
                 .snapshot(&id)?
                 .section(MODELING_NAMESPACE)
@@ -843,14 +843,14 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
             )
             .await?;
         }
-        let parameter_section: bellatrix_mde_contracts::ModelingSection = serde_json::from_value(
+        let parameter_section: bellatrix_mde::contracts::ModelingSection = serde_json::from_value(
             service
                 .snapshot(&id)?
                 .section(MODELING_NAMESPACE)
                 .ok_or("missing parameter section")?
                 .clone(),
         )?;
-        let Some(bellatrix_mde_contracts::ruml::Contract::Operation(operation)) = parameter_section
+        let Some(bellatrix_mde::contracts::ruml::Contract::Operation(operation)) = parameter_section
             .registry
             .get_entry(&operation_id)
             .map(|entry| &entry.contract)
@@ -891,7 +891,7 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
         let section = authored
             .section(MODELING_NAMESPACE)
             .ok_or("missing authored section")?;
-        let typed: bellatrix_mde_contracts::ModelingSection =
+        let typed: bellatrix_mde::contracts::ModelingSection =
             serde_json::from_value(section.clone())?;
         for (metaclass, expected) in [
             ("Class", 2),
@@ -920,7 +920,7 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
                 .flat_map(|diagram| diagram.all_views())
                 .all(|view| view.draft.is_none())
         );
-        let Some(bellatrix_mde_contracts::ruml::Contract::Operation(operation)) = typed
+        let Some(bellatrix_mde::contracts::ruml::Contract::Operation(operation)) = typed
             .registry
             .get_entry(&operation_id)
             .map(|entry| &entry.contract)
@@ -931,7 +931,7 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
             operation.owned_parameter,
             vec![second_parameter.clone(), first_parameter.clone()]
         );
-        let Some(bellatrix_mde_contracts::ruml::Contract::Class(class)) = typed
+        let Some(bellatrix_mde::contracts::ruml::Contract::Class(class)) = typed
             .registry
             .get_entry(&invoice)
             .map(|entry| &entry.contract)
@@ -970,7 +970,7 @@ async fn class_authoring_matches_between_cordis_events_and_ui_session() -> FlowR
             let reopened = bellatrix_mde::prepare_model_document(
                 &bellatrix_mde::decode_model_document(&bytes, format)?,
             )?;
-            let restored: bellatrix_mde_contracts::ModelingSection =
+            let restored: bellatrix_mde::contracts::ModelingSection =
                 serde_json::from_str(&reopened.section_json)?;
             assert_eq!(restored, typed);
         }

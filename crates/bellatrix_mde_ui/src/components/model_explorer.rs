@@ -8,7 +8,7 @@ pub(crate) enum ExplorerMoveTarget {
 
 #[derive(Clone)]
 pub(crate) struct ExplorerDiagramDrag {
-    pub project_id: bellatrix_project::ProjectId,
+    pub project_id: bellatrix_mde_cordis::project::ProjectId,
     pub diagram_id: String,
     pub revision: u64,
     pub label: String,
@@ -33,7 +33,7 @@ impl gpui::Render for ExplorerDiagramDrag {
 
 #[derive(Clone)]
 pub(crate) struct ExplorerElementDrag {
-    pub project_id: bellatrix_project::ProjectId,
+    pub project_id: bellatrix_mde_cordis::project::ProjectId,
     pub element_id: String,
     pub target_diagram_id: Option<String>,
     pub source_view_id: Option<String>,

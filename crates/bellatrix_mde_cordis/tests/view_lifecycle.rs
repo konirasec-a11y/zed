@@ -5,7 +5,7 @@ use bellatrix_mde_cordis::{
     MODELING_NAMESPACE, MdePlugin, ModelingDeleteDiagram, ModelingDeleteDiagramRequested,
     ModelingRemoveView, ModelingRemoveViewRequested,
 };
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;

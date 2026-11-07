@@ -106,7 +106,7 @@ pub fn generate_rust_struct(input_json: &str) -> Result<String, String> {
         .map_err(|error| error_response("GRAPH_INTEGRITY", error.to_string()))?;
     let projection = crate::uml_rust_struct::project(&model, &request.element_id)
         .map_err(|error| error_response("RUST_STRUCT_UNSUPPORTED", error))?;
-    let rendered = bellatrix_mde_rust_generator::render(
+    let rendered = crate::rust_renderer::render(
         &json!({
             "api_version": API_VERSION, "emission": projection["emission"],
         })

@@ -2,7 +2,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, project_model_section,
     validate_model_section_diagram,
 };
-use bellatrix_mde_contracts::protocol::{
+use bellatrix_mde::contracts::protocol::{
     command::*,
     explorer::VisualComponent,
     presentation::RelationshipMarker,
@@ -128,7 +128,7 @@ fn inspected(project: &Document, id: &str, path: &str) -> FlowResult<Value> {
 fn relationship_style(
     project: &Document,
     id: &str,
-) -> FlowResult<bellatrix_mde_contracts::protocol::presentation::RelationshipStyle> {
+) -> FlowResult<bellatrix_mde::contracts::protocol::presentation::RelationshipStyle> {
     project
         .diagrams
         .iter()

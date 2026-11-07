@@ -12,7 +12,7 @@ use bellatrix_mde_cordis::{
     ModelingSetProperty, ModelingSetPropertyRequested, ModelingValidateDiagram,
     ModelingValidateDiagramRequested, ViewEndpoints,
 };
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectImport,
     ProjectImportRequested, ProjectPlugin, ProjectService,
 };

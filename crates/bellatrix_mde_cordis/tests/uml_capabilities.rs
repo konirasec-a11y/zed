@@ -3,7 +3,7 @@ mod events;
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingQuickEdit, ModelingQuickEditRequested, UmlQuickCreate,
 };
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;

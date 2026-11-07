@@ -1,4 +1,4 @@
-use bellatrix_mde_contracts::protocol::tools::*;
+use crate::contracts::protocol::tools::*;
 // Catalog policy is resolved inside MDE; consumers receive only derived metadata.
 pub(crate) fn project(diagrams: &[crate::Diagram]) -> ToolCatalog {
     use crate::ModelingRelationKind as R;

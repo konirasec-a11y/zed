@@ -1,4 +1,4 @@
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     ModelingConvertDocument, ModelingConvertDocumentRequested,
 };
 use cordis::event::{ListenerRegistrationError, responder};

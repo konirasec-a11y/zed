@@ -4,7 +4,7 @@ use bellatrix_mde_cordis::{MdePlugin, MdeUiBridge};
 use bellatrix_mde_ui::{
     MdeUiSource, NativeDocumentImporter, NativeDocumentLease, register_mde_workspace,
 };
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectCreate, ProjectCreateRequested, ProjectId, ProjectOpen, ProjectOpenRequested,
     ProjectPlugin, ProjectService,
 };
@@ -72,9 +72,9 @@ impl BellatrixZedHost {
                 Box::pin(async move {
                     let cleanup_runtime = runtime.clone();
                     runtime.spawn(async move {
-                        let imported = match context.query::<bellatrix_project::ProjectImport>(
+                        let imported = match context.query::<bellatrix_mde_cordis::project::ProjectImport>(
                             Routing::Unscoped,
-                            bellatrix_project::ProjectImportRequested { document, is_saved },
+                            bellatrix_mde_cordis::project::ProjectImportRequested { document, is_saved },
                         ).await.map_err(|error| error.to_string())? {
                             QueryOutcome::Answer(Ok(document)) => document,
                             QueryOutcome::Answer(Err(error)) => return Err(format!("Cannot open Bellatrix document: {error}. An existing tab may already own this project identity.")),
@@ -139,8 +139,8 @@ impl BellatrixZedHost {
                                 let result = runtime.spawn(async move {
                                     let _guard = lock.lock().await;
                                     let revision = document.revision();
-                                    match context.query::<bellatrix_project::ProjectSave>(Routing::Unscoped,
-                                        bellatrix_project::ProjectSaveRequested { expected_bytes, document, path }).await.map_err(|error| error.to_string())? {
+                                    match context.query::<bellatrix_mde_cordis::project::ProjectSave>(Routing::Unscoped,
+                                        bellatrix_mde_cordis::project::ProjectSaveRequested { expected_bytes, document, path }).await.map_err(|error| error.to_string())? {
                                         QueryOutcome::Answer(Ok(saved)) if saved == revision => Ok(None),
                                         QueryOutcome::Answer(Ok(_)) => Err("Save completed for a different revision; the document remains unsaved".into()),
                                         QueryOutcome::Answer(Err(error)) => Err(error.to_string()),
@@ -167,13 +167,13 @@ impl BellatrixZedHost {
                                         QueryOutcome::Miss => return Err("MDJ export service unavailable".into()),
                                     };
                                     if !exported.matches_snapshot(&document) { return Err("MDJ export snapshot changed".into()); }
-                                    let ticket = match context.query::<bellatrix_project::ProjectPrepareEncodedSave>(Routing::Unscoped,
+                                    let ticket = match context.query::<bellatrix_mde_cordis::project::ProjectPrepareEncodedSave>(Routing::Unscoped,
                                         exported.prepare_save(path.clone())).await.map_err(|error| error.to_string())? {
                                         QueryOutcome::Answer(result) => result.map_err(|error| error.to_string())?,
                                         QueryOutcome::Miss => return Err("Export publication service unavailable".into()),
                                     };
-                                    let published = match context.query::<bellatrix_project::ProjectPublishNewFile>(Routing::Unscoped,
-                                        bellatrix_project::ProjectPublishNewFileRequested { ticket }).await.map_err(|error| error.to_string())? {
+                                    let published = match context.query::<bellatrix_mde_cordis::project::ProjectPublishNewFile>(Routing::Unscoped,
+                                        bellatrix_mde_cordis::project::ProjectPublishNewFileRequested { ticket }).await.map_err(|error| error.to_string())? {
                                         QueryOutcome::Answer(result) => result.map_err(|error| error.to_string())?,
                                         QueryOutcome::Miss => return Err("Export publication service unavailable".into()),
                                     };
@@ -327,12 +327,12 @@ pub fn install(cx: &mut App) -> Result<(), Box<dyn Error>> {
 
 async fn close_snapshot(
     context: &CordisContext,
-    document: Arc<bellatrix_project::ProjectDocument>,
+    document: Arc<bellatrix_mde_cordis::project::ProjectDocument>,
 ) -> Result<(), String> {
     match context
-        .query::<bellatrix_project::ProjectCloseSnapshot>(
+        .query::<bellatrix_mde_cordis::project::ProjectCloseSnapshot>(
             Routing::Unscoped,
-            bellatrix_project::ProjectCloseSnapshotRequested { document },
+            bellatrix_mde_cordis::project::ProjectCloseSnapshotRequested { document },
         )
         .await
         .map_err(|error| error.to_string())?

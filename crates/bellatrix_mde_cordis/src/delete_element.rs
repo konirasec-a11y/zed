@@ -1,6 +1,6 @@
 use crate::Command;
-pub use bellatrix_mde_contracts::events::{ModelingDeleteElement, ModelingDeleteElementRequested};
-use bellatrix_project::{ProjectId, ProjectService};
+pub use bellatrix_mde::contracts::events::{ModelingDeleteElement, ModelingDeleteElementRequested};
+use crate::project::{ProjectId, ProjectService};
 use cordis::Context;
 
 pub(crate) fn delete_element_command(

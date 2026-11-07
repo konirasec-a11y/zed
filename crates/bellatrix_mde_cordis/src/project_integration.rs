@@ -1,11 +1,11 @@
 use crate::Command;
 use crate::MODELING_NAMESPACE;
 use crate::view_edits::{ModelingMoveView, move_view};
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     ModelingRename, ModelingRenameRequested, ModelingSetExplorerParent,
     ModelingSetExplorerParentRequested, ModelingSetOwner, ModelingSetOwnerRequested,
 };
-use bellatrix_project::{ProjectDocument, ProjectId, ProjectService};
+use crate::project::{ProjectDocument, ProjectId, ProjectService};
 use cordis::event::responder;
 use cordis::{Context, InjectSpec, Plugin, Service};
 use std::{convert::Infallible, io, sync::Arc};

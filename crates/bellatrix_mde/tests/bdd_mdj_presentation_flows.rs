@@ -2,8 +2,8 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, export_mdj_section,
     import_mdj_document, prepare_model_document, project_model_section,
 };
-use bellatrix_mde_contracts::protocol::{ModelDocumentParts, command::Command};
-use bellatrix_mde_contracts::protocol::{
+use bellatrix_mde::contracts::protocol::{ModelDocumentParts, command::Command};
+use bellatrix_mde::contracts::protocol::{
     Style, TextAlignment, TextVerticalAlignment,
     projection::{InheritedStyleProperty, StyleInheritanceSource, StyleInheritanceStatus, View},
 };

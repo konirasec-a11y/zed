@@ -1,6 +1,6 @@
 use crate::uml::types::{RelationEnd, RelationEndMultiplicity};
 use crate::{LineMode, ModelingSection, Relation};
-pub use bellatrix_mde_contracts::protocol::presentation::{
+pub use crate::contracts::protocol::presentation::{
     RelationshipEndpointLabels, RelationshipMarker, RelationshipStyle,
 };
 

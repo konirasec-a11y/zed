@@ -1,9 +1,9 @@
 use crate::Command;
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     ModelingCreateVisualDraft, ModelingCreateVisualDraftRequested, ModelingPlaceElementView,
     ModelingPlaceElementViewRequested, ModelingRemoveView, ModelingRemoveViewRequested,
 };
-use bellatrix_project::{ProjectId, ProjectService};
+use crate::project::{ProjectId, ProjectService};
 use cordis::Context;
 use cordis::event::responder;
 use std::{convert::Infallible, io, sync::Arc};

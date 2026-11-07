@@ -1,6 +1,6 @@
 use crate::Command;
-pub use bellatrix_mde_contracts::events::{ModelingResizeView, ModelingResizeViewRequested};
-use bellatrix_project::{ProjectId, ProjectService};
+pub use bellatrix_mde::contracts::events::{ModelingResizeView, ModelingResizeViewRequested};
+use crate::project::{ProjectId, ProjectService};
 use cordis::Context;
 
 pub(crate) fn resize_view_command(

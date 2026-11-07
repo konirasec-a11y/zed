@@ -77,7 +77,7 @@ the current document, so retaining a frame never makes an outdated edit current.
 Superseded projection results are discarded before publication rather than
 temporarily replacing the visible model with a stale-projection error.
 
-Implemented operation paths include Class/Interface creation, rename, view move/resize, project save and a drag-and-drop Toolbox. These use the MDE graph validation and versioned `bellatrix_project` service, rather than writing model data in the GUI.
+Implemented operation paths include Class/Interface creation, rename, view move/resize, project save and a drag-and-drop Toolbox. These use the MDE graph validation and versioned `bellatrix_mde_cordis::project` service, rather than writing model data in the GUI.
 
 ## Limited native MDJ editing and copy export
 

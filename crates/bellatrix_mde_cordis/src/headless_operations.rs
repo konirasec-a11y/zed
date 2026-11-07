@@ -1,5 +1,5 @@
 use crate::ModelingOperation;
-pub use bellatrix_mde_contracts::events::ModelingExecute;
+pub use bellatrix_mde::contracts::events::ModelingExecute;
 use cordis::event::{ListenerRegistrationError, responder};
 use cordis::Context;
 use serde_json::Value;

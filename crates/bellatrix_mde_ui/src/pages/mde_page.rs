@@ -15,7 +15,7 @@ pub use crate::view_model::snapshot::MdeSnapshot;
 pub use bellatrix_mde_cordis::MODELING_NAMESPACE;
 
 use bellatrix_mde_cordis::ModelingTool;
-use bellatrix_project::ProjectId;
+use bellatrix_mde_cordis::project::ProjectId;
 use gpui::App;
 use gpui::AppContext;
 use gpui::Context;

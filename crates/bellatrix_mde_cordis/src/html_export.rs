@@ -1,5 +1,5 @@
 use crate::artifact_publication::{self, PreparedArtifacts};
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     ModelingPublishHtml, ModelingPublishHtmlRequested, ModelingRenderHtml,
     ModelingRenderHtmlRequested,
 };
@@ -10,12 +10,12 @@ use std::convert::Infallible;
 fn render_document(bytes: &[u8], format: &str) -> Result<String, String> {
     let model = bellatrix_mde::decode_model_document(bytes, format)?;
     let projection = bellatrix_mde::project_documentation(&model)?;
-    bellatrix_mde_html_exporter::render(&projection)
+    bellatrix_mde::html_renderer::render(&projection)
 }
 
 pub(crate) fn prepare(model_envelope: &str) -> Result<PreparedArtifacts, String> {
     let projection = bellatrix_mde::project_documentation(model_envelope)?;
-    artifact_publication::prepare(&bellatrix_mde_html_exporter::render(&projection)?)
+    artifact_publication::prepare(&bellatrix_mde::html_renderer::render(&projection)?)
 }
 
 pub(crate) fn register(context: &Context) -> Result<(), ListenerRegistrationError> {

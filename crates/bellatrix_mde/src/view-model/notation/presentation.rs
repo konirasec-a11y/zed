@@ -1,5 +1,5 @@
 use crate::{Element, ModelingRelationKind, Style, UmlType};
-pub use bellatrix_mde_contracts::protocol::presentation::{
+pub use crate::contracts::protocol::presentation::{
     ClassifierPresentation, MemberPresentation,
 };
 use serde_json::Value;

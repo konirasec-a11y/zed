@@ -9,7 +9,7 @@ use bellatrix_mde_cordis::ElementInspector;
 use bellatrix_mde_cordis::InspectorProperty;
 use bellatrix_mde_cordis::InspectorReferenceChoice;
 use bellatrix_mde_cordis::PropertyEditor;
-use bellatrix_project::ProjectId;
+use bellatrix_mde_cordis::project::ProjectId;
 use gpui::AnyElement;
 use gpui::Context;
 use gpui::Entity;

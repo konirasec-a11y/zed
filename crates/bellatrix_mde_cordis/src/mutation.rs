@@ -1,7 +1,7 @@
 use crate::{Command, MODELING_NAMESPACE};
 use crate::{TraceOutcome, TracePhase};
 use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
-use bellatrix_project::{
+use crate::project::{
     ProjectDocument, ProjectId, ProjectReplaceSnapshot, ProjectReplaceSnapshotRequested,
     ProjectService,
 };

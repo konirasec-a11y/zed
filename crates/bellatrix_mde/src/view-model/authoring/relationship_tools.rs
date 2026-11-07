@@ -1,1 +1,1 @@
-pub use bellatrix_mde_contracts::protocol::command::ModelingRelationKind;
+pub use crate::contracts::protocol::command::ModelingRelationKind;

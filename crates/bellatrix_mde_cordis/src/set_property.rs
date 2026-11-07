@@ -1,6 +1,6 @@
 use crate::Command;
-pub use bellatrix_mde_contracts::events::{ModelingSetProperty, ModelingSetPropertyRequested};
-use bellatrix_project::{ProjectId, ProjectService};
+pub use bellatrix_mde::contracts::events::{ModelingSetProperty, ModelingSetPropertyRequested};
+use crate::project::{ProjectId, ProjectService};
 use cordis::Context;
 
 pub(crate) fn set_property_command(

@@ -1,7 +1,7 @@
 //! Shared action definitions with type-specific composition, independent of the renderer.
 use crate::UmlType;
 
-pub use bellatrix_mde_contracts::protocol::inspector::{
+pub use crate::contracts::protocol::inspector::{
     QuickEditAction, QuickEditAvailability, QuickEditControl, QuickEditSide,
 };
 
@@ -362,8 +362,8 @@ pub fn quick_edit_for(kind: &str) -> Vec<QuickEditAction> {
             .iter()
             .copied()
             .filter(|action| {
-                use bellatrix_mde_contracts::protocol::command::ModelingMemberKind;
-                use bellatrix_mde_contracts::protocol::inspector::QuickEditIntent;
+                use crate::contracts::protocol::command::ModelingMemberKind;
+                use crate::contracts::protocol::inspector::QuickEditIntent;
                 if matches!(action.id, "uml.name-expression" | "uml.visibility") {
                     return true;
                 }

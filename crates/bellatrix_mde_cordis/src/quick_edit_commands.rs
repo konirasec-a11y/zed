@@ -1,6 +1,6 @@
 use crate::Command;
-pub use bellatrix_mde_contracts::events::{ModelingQuickEdit, ModelingQuickEditRequested};
-use bellatrix_project::{ProjectId, ProjectService};
+pub use bellatrix_mde::contracts::events::{ModelingQuickEdit, ModelingQuickEditRequested};
+use crate::project::{ProjectId, ProjectService};
 use cordis::Context;
 
 pub(crate) fn execute_quick_edit_command(

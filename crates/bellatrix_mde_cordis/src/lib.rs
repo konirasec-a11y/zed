@@ -1,16 +1,16 @@
 //! Cordis transport and project-revision integration for the single MDE domain.
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     ModelingChannels, ModelingCommand, ModelingCompleted, ModelingCompletion, ModelingOperation,
     ModelingRequested,
 };
-use bellatrix_mde_contracts::protocol::trace as trace_contract;
+use bellatrix_mde::contracts::protocol::trace as trace_contract;
 pub use trace_contract::{
     DiagnosticSeverity, ExecutionEvent, ModelingDiagnostic, TraceOutcome, TracePhase,
 };
 mod execution_journal;
-pub use bellatrix_mde_contracts::protocol::MODELING_NAMESPACE;
-use bellatrix_mde_contracts::protocol::command as command_contract;
-use bellatrix_mde_contracts::protocol::tools as tool_catalog;
+pub use bellatrix_mde::contracts::protocol::MODELING_NAMESPACE;
+use bellatrix_mde::contracts::protocol::command as command_contract;
+use bellatrix_mde::contracts::protocol::tools as tool_catalog;
 pub use command_contract::*;
 pub use execution_journal::{
     ExecutionJournal, ExecutionJournalSnapshot, ExecutionScope, OpeningAttempt, OpeningStage,
@@ -53,6 +53,7 @@ pub use task_events::{
     ModelingTaskKind, ModelingTaskSummary,
 };
 mod name_expression;
+pub mod project;
 mod project_integration;
 pub use name_expression::{ModelingSetNameExpression, ModelingSetNameExpressionRequested};
 mod quick_edit_commands;
@@ -157,9 +158,9 @@ impl Plugin for ModelingPlugin {
     }
 }
 
-use bellatrix_mde_contracts::protocol::explorer as explorer_projection;
-use bellatrix_mde_contracts::protocol::inspector as inspector_contract;
-pub use bellatrix_mde_contracts::protocol::presentation as presentation_contract;
+use bellatrix_mde::contracts::protocol::explorer as explorer_projection;
+use bellatrix_mde::contracts::protocol::inspector as inspector_contract;
+pub use bellatrix_mde::contracts::protocol::presentation as presentation_contract;
 pub use explorer_projection::{ExplorerProjection, ExplorerRow, VisualComponent};
 pub use inspector_contract::{
     ElementInspector, InspectorMember, InspectorProperty, InspectorReferenceChoice, PropertyEditor,

@@ -3,7 +3,7 @@ use bellatrix_mde_cordis::{
     ModelingPrepareDocumentRequested, ModelingReadProjection, ModelingReadProjectionRequested,
     ModelingSnapshot,
 };
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectDocument, ProjectId, ProjectImport, ProjectImportRequested, ProjectPlugin,
     ProjectService,
 };

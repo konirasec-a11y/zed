@@ -1,7 +1,7 @@
 use crate as mde;
 use crate::mde_api_projection as projection;
-use bellatrix_mde_contracts::protocol::command::{LineMode, TimingMode, TimingPresentation};
-use bellatrix_mde_contracts::protocol::presentation::*;
+use crate::contracts::protocol::command::{LineMode, TimingMode, TimingPresentation};
+use crate::contracts::protocol::presentation::*;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 #[path = "projection_entity.rs"]

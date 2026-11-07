@@ -2,7 +2,7 @@
 use crate::Command;
 use crate::{TraceOutcome, TracePhase};
 use bellatrix_mde::MdeExecutionTrace as ExecutionTrace;
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     DiagramValidationResult, ModelingCreateDiagram, ModelingCreateDiagramRequested,
     ModelingCreateExplorerDiagram, ModelingCreateExplorerDiagramRequested, ModelingDeleteDiagram,
     ModelingDeleteDiagramRequested, ModelingExecutionTrace, ModelingExecutionTraceEvent,
@@ -11,7 +11,7 @@ pub use bellatrix_mde_contracts::events::{
     ModelingValidateDiagramTracedRequested, ModelingValidateSnapshot,
     ModelingValidateSnapshotRequested, TracedDiagramValidationResult,
 };
-use bellatrix_project::{ProjectId, ProjectService};
+use crate::project::{ProjectId, ProjectService};
 use cordis::Context;
 use cordis::event::responder;
 use std::{

@@ -3,7 +3,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_document, encode_model_section,
     prepare_model_document, project_model_section,
 };
-use bellatrix_mde_contracts::protocol::{
+use bellatrix_mde::contracts::protocol::{
     command::*, inspector::ElementInspector, projection::ModelingProjection,
 };
 use serde_json::{Value, json};

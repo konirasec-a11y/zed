@@ -10,28 +10,12 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 CRATES = [
-    "bellatrix_project",
     "bellatrix_mde",
-    "bellatrix_mde_contracts",
-    "bellatrix_mde_protocol",
-    "bellatrix_mde_templates",
     "bellatrix_mde_cordis",
-    "bellatrix_mde_rust_generator",
-    "bellatrix_mde_html_exporter",
-    "bellatrix_mde_cli",
-    "bellatrix_zed_host",
     "bellatrix_mde_ui",
+    "bellatrix_zed_host",
 ]
-HEADLESS = {
-    "bellatrix_project",
-    "bellatrix_mde",
-    "bellatrix_mde_contracts",
-    "bellatrix_mde_protocol",
-    "bellatrix_mde_templates",
-    "bellatrix_mde_cordis",
-    "bellatrix_mde_rust_generator",
-    "bellatrix_mde_html_exporter",
-}
+HEADLESS = {"bellatrix_mde", "bellatrix_mde_cordis"}
 
 def manifest(path: Path) -> dict:
     return tomllib.loads(path.read_text(encoding="utf-8"))
@@ -89,7 +73,13 @@ def check() -> None:
                 for key in ("gpui", "workspace", "editor", "ui")
             ), f"Backend engine has GUI dependency: {package}"
 
-    for obsolete in ("bellatrix_mde_model", "bellatrix_mde_modeling", "bellatrix_uml_metamodel"):
+    for obsolete in (
+        "bellatrix_mde_model", "bellatrix_mde_modeling", "bellatrix_uml_metamodel",
+        "bellatrix_project", "bellatrix_mde_contracts", "bellatrix_mde_protocol",
+        "bellatrix_mde_templates", "bellatrix_mde_rust_generator",
+        "bellatrix_mde_html_exporter", "bellatrix_mde_cli", "bellatrix_ui_uml",
+        "bellatrix_mde_workbench",
+    ):
         assert f"crates/{obsolete}" not in workspace["members"], obsolete
         assert obsolete not in dependencies, obsolete
         assert not (ROOT / "crates" / obsolete / "Cargo.toml").exists(), obsolete

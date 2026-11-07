@@ -6,7 +6,6 @@ edition.workspace = true
 rust-version = "1.98.1"
 
 [dependencies]
-bellatrix_project = { path = "../bellatrix_project" }
 bellatrix_mde_cordis = { path = "../bellatrix_mde_cordis" }
 bellatrix_mde_ui = { path = "../bellatrix_mde_ui" }
 cordis-rs.workspace = true

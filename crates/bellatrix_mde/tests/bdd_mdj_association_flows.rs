@@ -2,7 +2,7 @@ use bellatrix_mde::{
     apply_model_command, decode_model_document, encode_model_section, export_mdj_section,
     import_mdj_document, prepare_model_document, project_model_section,
 };
-use bellatrix_mde_contracts::protocol::{
+use bellatrix_mde::contracts::protocol::{
     ModelDocumentParts, command::Command, projection::ModelingProjection,
 };
 use prost::Message;
@@ -354,7 +354,7 @@ fn omitted_multiplicity_survives_edit_save_reopen_and_restore() -> FlowResult<()
 fn choose_navigation(
     project: &Value,
     id: &str,
-    navigation: bellatrix_mde_contracts::protocol::NavigationKnowledge,
+    navigation: bellatrix_mde::contracts::protocol::NavigationKnowledge,
 ) -> FlowResult<Value> {
     edit(
         project,
@@ -398,7 +398,7 @@ fn assert_navigation_export(project: &Value, left: Option<&str>, right: &str) ->
 }
 
 fn assert_navigation_consumers(project: &Value, known: bool) -> FlowResult<()> {
-    use bellatrix_mde_contracts::protocol::presentation::EndpointMarkerGlyph;
+    use bellatrix_mde::contracts::protocol::presentation::EndpointMarkerGlyph;
     let association = contract_data(project, "association", "Association")?;
     assert_eq!(
         association.get("navigableOwnedEnd"),
@@ -505,7 +505,7 @@ fn assert_navigation_consumers(project: &Value, known: bool) -> FlowResult<()> {
 
 #[test]
 fn unknown_navigation_survives_reopening_decisions_and_atomic_repair() -> FlowResult<()> {
-    use bellatrix_mde_contracts::protocol::NavigationKnowledge;
+    use bellatrix_mde::contracts::protocol::NavigationKnowledge;
     assert!(include_str!("features/mdj_association_lifecycle.feature").contains(
         "Scenario: Author navigation decisions without inventing defaults or losing source spelling"
     ));

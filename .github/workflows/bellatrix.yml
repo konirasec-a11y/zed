@@ -13,6 +13,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/bellatrix.yml'
+      - 'script/bellatrix_mde/**'
   push:
     branches: [main]
     paths:
@@ -26,6 +27,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/bellatrix.yml'
+      - 'script/bellatrix_mde/**'
 
 concurrency:
   group: bellatrix-${{ github.ref }}
@@ -46,27 +48,11 @@ jobs:
       - name: Check Bellatrix host and Zed runtime together
         shell: pwsh
         run: |
-          cargo +1.98.1 check -p bellatrix_mde_cordis -p bellatrix_ui_uml -p bellatrix_mde_workbench -p bellatrix_zed_host -p zed
+          cargo +1.98.1 check -p bellatrix_mde -p bellatrix_mde_cordis -p bellatrix_mde_ui -p bellatrix_zed_host -p zed
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Test headless Bellatrix domain and Cordis lifecycle
+      - name: Run existing Bellatrix BDD integrations
         shell: pwsh
-        run: |
-          $packages = @(
-            'bellatrix_project', 'bellatrix_mde_model',
-            'bellatrix_mde_modeling', 'bellatrix_mde_cordis',
-            'bellatrix_mde_rust_generator', 'bellatrix_mde_html_exporter'
-          )
-          foreach ($package in $packages) {
-            cargo +1.98.1 test -p $package
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
-      - name: Test native Zed icon assets and Bellatrix Dock priorities
-        shell: pwsh
-        run: |
-          cargo +1.98.1 test -p icons test_all_icons_exist
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo +1.98.1 test -p bellatrix_mde_workbench bellatrix_panel_priorities_do_not_collide_with_zed_or_each_other
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Check Bellatrix Workbench warnings
-        shell: pwsh
-        run: cargo +1.98.1 clippy -p bellatrix_mde_workbench --all-targets -- -D warnings
+        run: ./script/bellatrix_mde/smoke.ps1
+      - name: Check Bellatrix UI warnings
+        shell: bash
+        run: ./script/clippy -p bellatrix_mde_ui

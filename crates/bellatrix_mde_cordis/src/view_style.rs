@@ -1,11 +1,11 @@
 use crate::Command;
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     ModelingReorderView, ModelingReorderViewRequested, ModelingSetViewLabel,
     ModelingSetViewLabelRequested, ModelingSetViewPath, ModelingSetViewPathRequested,
     ModelingSetViewRouting, ModelingSetViewRoutingRequested, ModelingSetViewStyle,
     ModelingSetViewStyleRequested, ModelingSetViewTiming, ModelingSetViewTimingRequested,
 };
-use bellatrix_project::{ProjectId, ProjectService};
+use crate::project::{ProjectId, ProjectService};
 use cordis::{Context, event::responder};
 use std::{convert::Infallible, io, sync::Arc};
 

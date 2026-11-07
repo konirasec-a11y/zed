@@ -8,7 +8,7 @@ use bellatrix_mde_cordis::{
     ModelingExecutionTrace, ModelingExecutionTraceEvent, ModelingRun, ModelingRunRequested,
     ModelingTaskKind,
 };
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectClose, ProjectCloseRequested, ProjectCreate, ProjectCreateRequested, ProjectDocument,
     ProjectId, ProjectOpen, ProjectOpenRequested, ProjectPlugin, ProjectReplace,
     ProjectReplaceRequested, ProjectSave, ProjectSaveRequested, ProjectService,

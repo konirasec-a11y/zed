@@ -1,5 +1,5 @@
 //! Pure model commands. The caller owns concurrency; this module owns mutations.
-pub use bellatrix_mde_contracts::protocol::command::{Command, ViewOrder};
+pub use crate::contracts::protocol::command::{Command, ViewOrder};
 
 #[path = "association_ends.rs"]
 mod association_ends;

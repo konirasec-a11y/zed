@@ -3,7 +3,7 @@ use crate::{
     reroute_relationships,
 };
 
-pub use bellatrix_mde_contracts::protocol::command::ModelingMemberKind;
+pub use crate::contracts::protocol::command::ModelingMemberKind;
 
 pub(super) fn grow_classifier_views(
     section: &mut ModelingSection,

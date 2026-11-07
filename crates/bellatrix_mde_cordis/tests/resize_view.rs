@@ -2,7 +2,7 @@
 mod events;
 use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::{MdePlugin, ModelingResizeView, ModelingResizeViewRequested};
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;

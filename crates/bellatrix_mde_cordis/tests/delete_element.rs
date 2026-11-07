@@ -1,7 +1,7 @@
 #[path = "support/events.rs"]
 mod events;
 use bellatrix_mde_cordis::{MdePlugin, ModelingDeleteElement, ModelingDeleteElementRequested};
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;

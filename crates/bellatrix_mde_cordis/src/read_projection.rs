@@ -1,8 +1,8 @@
-pub use bellatrix_mde_contracts::events::{
+pub use bellatrix_mde::contracts::events::{
     ModelingReadProjection, ModelingReadProjectionRequested, ModelingSnapshot,
 };
-pub use bellatrix_mde_contracts::protocol::projection::*;
-use bellatrix_project::{ProjectDocument, ProjectService};
+pub use bellatrix_mde::contracts::protocol::projection::*;
+use crate::project::{ProjectDocument, ProjectService};
 use cordis::event::responder;
 use cordis::Context;
 use std::{convert::Infallible, sync::Arc};

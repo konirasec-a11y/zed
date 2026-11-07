@@ -1,1 +1,1 @@
-pub use bellatrix_mde_contracts::protocol::command::{ModelingElementKind, ModelingTool};
+pub use crate::contracts::protocol::command::{ModelingElementKind, ModelingTool};

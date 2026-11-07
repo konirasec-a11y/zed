@@ -1,4 +1,4 @@
-use bellatrix_mde_contracts::{
+use crate::contracts::{
     ruml,
     uml::{
         metamodel,

@@ -3,7 +3,7 @@
 
 Python 3.11+; preparation does not invoke Cargo or install anything.
 Example: bellatrix_headless.py --cache-dir /tmp/bellatrix-headless --prepare-only
-Example: bellatrix_headless.py --cache-dir /tmp/bellatrix-headless -- test -p bellatrix_mde
+Example: bellatrix_headless.py --cache-dir /tmp/bellatrix-headless -- test -p bellatrix_mde --test bdd_diagram_flows
 
 This is supplemental validation, not native-workspace or GUI acceptance. Root
 patches, profiles, lints and .cargo configuration are deliberately not inherited.
@@ -23,12 +23,14 @@ import tomllib
 from datetime import datetime, timezone
 
 
-PACKAGES = (
-    "bellatrix_mde", "bellatrix_mde_contracts", "bellatrix_mde_protocol",
-    "bellatrix_project", "bellatrix_mde_cordis",
-    "bellatrix_mde_templates", "bellatrix_mde_rust_generator",
-    "bellatrix_mde_html_exporter", "bellatrix_mde_cli",
-)
+PACKAGES = ("bellatrix_mde", "bellatrix_mde_cordis")
+BDD_TARGETS = {
+    "bellatrix_mde": (
+        "bdd_native_class_authoring", "bdd_diagram_flows",
+        "bdd_mdj_association_flows", "bdd_mdj_presentation_flows",
+    ),
+    "bellatrix_mde_cordis": ("bdd_mdj_edit_save_flows",),
+}
 OWNED_TREES = tuple(f"crates/{name}" for name in PACKAGES) + (
     "docs/bellatrix/standards/uml",
 )
@@ -181,7 +183,7 @@ def main():
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--target-dir", type=Path, help="Persistent Cargo target directory outside the repository (default: cache-dir/target)")
     parser.add_argument("--no-seed-lock", action="store_true", help="Do not seed a missing cache lockfile from the repository")
-    parser.add_argument("cargo_arguments", nargs=argparse.REMAINDER, help="Cargo arguments after -- (default: test --workspace)")
+    parser.add_argument("cargo_arguments", nargs=argparse.REMAINDER, help="Cargo arguments after -- (default: existing BDD integration targets)")
     options = parser.parse_args()
     repository = Path(__file__).resolve().parents[2]
     cache = options.cache_dir.expanduser().resolve()
@@ -193,6 +195,13 @@ def main():
         arguments = arguments[1:]
     if any(argument.split("=", 1)[0] in {"--manifest-path", "--target-dir", "--config"} for argument in arguments):
         parser.error("Manifest, target directory and configuration overrides are not supported")
+    if arguments[:1] == ["test"]:
+        permitted = {
+            ("test", "-p", package, "--test", target)
+            for package, targets in BDD_TARGETS.items() for target in targets
+        }
+        if tuple(arguments) not in permitted:
+            parser.error("Use test -p PACKAGE --test BDD_TARGET for one existing BDD target, or omit Cargo arguments to run all BDD targets")
     provenance = prepare(repository, cache, not options.no_seed_lock)
     print(f"Prepared {len(PACKAGES)} exact headless packages in {cache}", flush=True)
     print(f"Source provenance: {cache / 'provenance.json'}", flush=True)
@@ -202,11 +211,20 @@ def main():
     environment = os.environ.copy()
     environment["CARGO_TARGET_DIR"] = str(target)
     environment["RUSTUP_TOOLCHAIN"] = provenance["toolchain"]
-    command = ["cargo", *(arguments or ["test", "--workspace"])]
-    provenance["cargo_command"] = command
+    commands = [["cargo", *arguments]] if arguments else [
+        ["cargo", "test", "-p", package, *[
+            argument for target in targets for argument in ("--test", target)
+        ]]
+        for package, targets in BDD_TARGETS.items()
+    ]
+    provenance["cargo_commands"] = commands
     provenance["cargo_working_directory"] = str(cache)
     provenance["cargo_target_directory"] = str(target)
-    provenance["cargo_exit_code"] = subprocess.call(command, cwd=cache, env=environment)
+    provenance["cargo_exit_code"] = 0
+    for command in commands:
+        provenance["cargo_exit_code"] = subprocess.call(command, cwd=cache, env=environment)
+        if provenance["cargo_exit_code"] != 0:
+            break
     provenance["cache_lock_sha256_after_cargo"] = digest(cache / "Cargo.lock") if (cache / "Cargo.lock").exists() else None
     provenance["copied_sources_unchanged_after_cargo"] = file_hashes(cache) == provenance["source_sha256"]
     (cache / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")

@@ -7,7 +7,7 @@ use bellatrix_mde_cordis::{
     ModelingQuickEditRequested, ModelingSetNameExpression, ModelingSetNameExpressionRequested,
     UmlQuickCreate,
 };
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectCreate, ProjectCreateRequested, ProjectId, ProjectPlugin, ProjectService,
 };
 use cordis::event::QueryOutcome;

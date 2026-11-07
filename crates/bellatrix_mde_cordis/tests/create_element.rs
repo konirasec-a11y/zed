@@ -4,7 +4,7 @@ use bellatrix_mde_cordis::Geometry;
 use bellatrix_mde_cordis::{
     MdePlugin, ModelingCreateElement, ModelingCreateElementRequested, ModelingElementKind,
 };
-use bellatrix_project::{
+use bellatrix_mde_cordis::project::{
     ProjectCreate, ProjectCreateRequested, ProjectDocument, ProjectId, ProjectPlugin,
     ProjectService,
 };
